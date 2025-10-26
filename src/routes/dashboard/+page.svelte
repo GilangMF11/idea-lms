@@ -47,8 +47,9 @@
       
       if (!$authStore.user) return;
       
-      // Load classes
-      const classesResponse = await fetch('/api/classes', {
+      // Load classes - use different endpoint based on user role
+      const classesEndpoint = $authStore.user?.role === 'ADMIN' ? '/api/classes' : '/api/me/classes';
+      const classesResponse = await fetch(classesEndpoint, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -405,11 +406,21 @@
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
     <!-- My Classes -->
     <div class="card p-6">
-      <h3 class="text-lg font-semibold text-gray-900 mb-4">My Classes</h3>
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-semibold text-gray-900">My Classes</h3>
+        {#if classes.length > 0}
+          <Button variant="secondary" size="sm" on:click={() => goto('/classes')}>
+            View All
+          </Button>
+        {/if}
+      </div>
       {#if classes.length > 0}
         <div class="space-y-3">
-          {#each classes as classItem}
-            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+          {#each classes.slice(0, 3) as classItem}
+            <button 
+              class="w-full flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors text-left"
+              on:click={() => goto(`/classes/${classItem.id}`)}
+            >
               <div>
                 <p class="text-sm font-medium text-gray-900">{classItem.name}</p>
                 <p class="text-xs text-gray-500">{classItem.description || 'No description'}</p>
@@ -417,8 +428,15 @@
               <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800">
                 Active
               </span>
-            </div>
+            </button>
           {/each}
+          {#if classes.length > 3}
+            <div class="text-center pt-2">
+              <Button variant="secondary" size="sm" on:click={() => goto('/classes')}>
+                View All Classes ({classes.length})
+              </Button>
+            </div>
+          {/if}
         </div>
       {:else}
         <div class="text-center py-8">
@@ -428,8 +446,8 @@
           <h3 class="mt-2 text-sm font-medium text-gray-900">No classes yet</h3>
           <p class="mt-1 text-sm text-gray-500">Join a class to get started with your learning journey.</p>
           <div class="mt-6">
-            <Button variant="primary" size="sm">
-              Join Class
+            <Button variant="primary" size="sm" on:click={() => goto('/classes')}>
+              View Classes
             </Button>
           </div>
         </div>
@@ -470,11 +488,11 @@
     <div class="card p-6">
       <h3 class="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Button variant="primary" size="md" fullWidth>
+        <Button variant="primary" size="md" fullWidth on:click={() => goto('/classes')}>
           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
           </svg>
-          Join Class
+          View Classes
         </Button>
         <Button variant="secondary" size="md" fullWidth>
           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

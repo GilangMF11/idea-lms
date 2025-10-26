@@ -141,21 +141,24 @@ model Annotation {
   readingText ReadingText @relation(fields: [readingTextId], references: [id])
   user        User        @relation(fields: [userId], references: [id])
   class       Class       @relation(fields: [classId], references: [id])
+  chatMessages ChatMessage[] // Discussion messages
 
   @@map("annotations")
 }
 
 model ChatMessage {
-  id        String   @id @default(cuid())
-  classId   String
-  userId    String
-  content   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  classId      String
+  userId       String
+  content      String
+  annotationId String?  // Optional - untuk discussion annotation
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   // Relations
-  class Class @relation(fields: [classId], references: [id])
-  user  User  @relation(fields: [userId], references: [id])
+  class      Class      @relation(fields: [classId], references: [id])
+  user       User       @relation(fields: [userId], references: [id])
+  annotation Annotation? @relation(fields: [annotationId], references: [id])
 
   @@map("chat_messages")
 }

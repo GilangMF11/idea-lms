@@ -19,6 +19,15 @@
   let editAnnotationText = '';
   let showDeleteAnnotationModal = false;
   let annotationToDelete: any = null;
+  
+  // Chat functionality
+  let showChatModal = false;
+  let selectedAnnotationForChat: any = null;
+  let chatMessages: any[] = [];
+  let newMessage = '';
+  let chatLoading = false;
+  let chatError = '';
+  let chatSocket: WebSocket | null = null;
 
   onMount(() => {
     authStore.init();
@@ -31,6 +40,14 @@
     
     loadReadingText();
     loadAnnotations();
+    
+    // Cleanup function
+    return () => {
+      stopPolling();
+      if (chatSocket) {
+        chatSocket.close();
+      }
+    };
   });
 
   async function loadReadingText() {
@@ -186,6 +203,159 @@
   function closeDeleteAnnotationModal() {
     showDeleteAnnotationModal = false;
     annotationToDelete = null;
+  }
+
+  async function loadChatMessages(annotationId: string) {
+    try {
+      chatLoading = true;
+      chatError = '';
+      
+      console.log('Loading chat messages for annotation:', annotationId);
+      console.log('Class ID:', readingText?.classId);
+      console.log('Token:', $authStore.token ? 'Present' : 'Missing');
+      
+      const response = await fetch(`/api/chat?classId=${readingText?.classId}&annotationId=${annotationId}`, {
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log('Response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Chat messages loaded:', data);
+        chatMessages = data.messages || [];
+      } else {
+        const errorData = await response.json();
+        console.error('Error loading chat messages:', errorData);
+        chatError = errorData.error || 'Failed to load chat messages';
+      }
+    } catch (err) {
+      console.error('Error loading chat messages:', err);
+      chatError = 'Failed to load chat messages';
+    } finally {
+      chatLoading = false;
+    }
+  }
+
+  function setupWebSocket() {
+    if (chatSocket) {
+      chatSocket.close();
+      chatSocket = null;
+    }
+    
+    // Skip WebSocket setup for now since SvelteKit doesn't have built-in WebSocket support
+    // We'll use polling instead for real-time updates
+    console.log('Using polling for real-time updates (WebSocket not available)');
+    
+    // Set up polling for new messages
+    if (selectedAnnotationForChat) {
+      startPolling();
+    }
+  }
+
+  let pollingInterval: any = null;
+
+  function startPolling() {
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+    }
+    
+    // Poll for new messages every 3 seconds
+    pollingInterval = setInterval(async () => {
+      if (selectedAnnotationForChat && showChatModal) {
+        try {
+          const response = await fetch(`/api/chat?classId=${readingText?.classId}&annotationId=${selectedAnnotationForChat.id}`, {
+            headers: {
+              'Authorization': `Bearer ${$authStore.token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            const newMessages = data.messages || [];
+            
+            // Only update if we have new messages
+            if (newMessages.length > chatMessages.length) {
+              chatMessages = newMessages;
+            }
+          }
+        } catch (error) {
+          console.error('Error polling for messages:', error);
+        }
+      }
+    }, 3000);
+  }
+
+  function stopPolling() {
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+      pollingInterval = null;
+    }
+  }
+
+  function openChatModal(annotation: any) {
+    selectedAnnotationForChat = annotation;
+    showChatModal = true;
+    loadChatMessages(annotation.id);
+    setupWebSocket();
+  }
+
+  function closeChatModal() {
+    showChatModal = false;
+    selectedAnnotationForChat = null;
+    newMessage = '';
+    chatMessages = [];
+    chatError = '';
+    
+    // Stop polling when closing chat modal
+    stopPolling();
+    
+    if (chatSocket) {
+      chatSocket.close();
+      chatSocket = null;
+    }
+  }
+
+  async function sendMessage() {
+    if (!newMessage.trim() || !selectedAnnotationForChat) return;
+    
+    try {
+      chatLoading = true;
+      chatError = '';
+      
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          classId: readingText?.classId,
+          content: newMessage.trim(),
+          annotationId: selectedAnnotationForChat.id
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        chatMessages = [...chatMessages, data.message];
+        newMessage = '';
+        
+        // Message sent successfully, polling will pick up any other new messages
+        console.log('Message sent successfully');
+      } else {
+        chatError = 'Failed to send message';
+      }
+    } catch (err) {
+      console.error('Error sending message:', err);
+      chatError = 'Failed to send message';
+    } finally {
+      chatLoading = false;
+    }
   }
 
   function scrollToSelectedText(annotation: any) {
@@ -474,7 +644,7 @@
               transition: all 0.2s ease;
             `;
             span.title = `Annotation: ${annotation.content}`;
-            span.onclick = () => scrollToSelectedText(annotation);
+            span.onclick = () => openChatModal(annotation);
             
             // No hover effect needed since there's no visual element
             
@@ -622,8 +792,17 @@
                         </div>
                       </div>
                       
-                      {#if ['ADMIN', 'TEACHER'].includes($authStore.user?.role || '')}
-                        <div class="flex space-x-2">
+                      <div class="flex space-x-2">
+                        <button
+                          class="text-orange-600 hover:text-orange-800 text-xs flex items-center"
+                          on:click={() => openChatModal(annotation)}
+                        >
+                          <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                          </svg>
+                          Discuss
+                        </button>
+                        {#if ['ADMIN', 'TEACHER'].includes($authStore.user?.role || '')}
                           <button
                             class="text-blue-600 hover:text-blue-800 text-xs"
                             on:click={() => startEditAnnotation(annotation)}
@@ -638,8 +817,8 @@
                           >
                             Delete
                           </button>
-                        </div>
-                      {/if}
+                        {/if}
+                      </div>
                     </div>
                     
                     {#if annotation.selectedText}
@@ -704,10 +883,115 @@
             {/if}
           </div>
         </div>
-      </div>
-    </main>
+    </div>
+  </main>
   </div>
-{/if}
+
+  <!-- Chat Modal -->
+  {#if showChatModal && selectedAnnotationForChat}
+    <div 
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      role="dialog"
+      aria-modal="true"
+      tabindex="0"
+      on:click={(e) => e.target === e.currentTarget && closeChatModal()}
+      on:keydown={(e) => e.key === 'Escape' && closeChatModal()}
+    >
+      <div 
+        class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col"
+        role="document"
+      >
+        <!-- Header -->
+        <div class="flex items-center justify-between p-6 border-b border-gray-200">
+          <div class="flex items-center">
+            <div class="h-10 w-10 bg-orange-100 rounded-full flex items-center justify-center mr-3">
+              <svg class="h-6 w-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900">Discussion</h3>
+              <p class="text-sm text-gray-500">Annotation by {selectedAnnotationForChat.user?.firstName} {selectedAnnotationForChat.user?.lastName}</p>
+            </div>
+          </div>
+          <button
+            class="text-gray-400 hover:text-gray-600"
+            on:click={closeChatModal}
+            aria-label="Close chat modal"
+          >
+            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Annotation Content -->
+        <div class="p-4 bg-orange-50 border-b border-gray-200">
+          <div class="text-sm font-medium text-orange-800 mb-2">Selected Text:</div>
+          <div class="text-sm text-orange-700 italic mb-2">"{selectedAnnotationForChat.selectedText}"</div>
+          <div class="text-sm font-medium text-orange-800 mb-1">Annotation:</div>
+          <div class="text-sm text-orange-700">{selectedAnnotationForChat.content}</div>
+        </div>
+
+        <!-- Chat Messages -->
+        <div class="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
+          {#if chatLoading && chatMessages.length === 0}
+            <div class="flex justify-center items-center h-32">
+              <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
+            </div>
+          {:else if chatError}
+            <div class="text-center text-red-600 text-sm">{chatError}</div>
+          {:else if chatMessages.length === 0}
+            <div class="text-center text-gray-500 text-sm">No messages yet. Start the discussion!</div>
+          {:else}
+            {#each chatMessages as message}
+              <div class="flex {message.userId === $authStore.user?.id ? 'justify-end' : 'justify-start'}">
+                <div class="max-w-xs lg:max-w-md">
+                  <div class="flex items-center mb-1 {message.userId === $authStore.user?.id ? 'justify-end' : 'justify-start'}">
+                    <span class="text-xs text-gray-500">{message.user.firstName} {message.user.lastName}</span>
+                    <span class="text-xs text-gray-400 ml-2">{new Date(message.createdAt).toLocaleTimeString()}</span>
+                  </div>
+                  <div class="px-4 py-2 rounded-lg {message.userId === $authStore.user?.id ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-900'}">
+                    <p class="text-sm">{message.content}</p>
+                  </div>
+                </div>
+              </div>
+            {/each}
+          {/if}
+        </div>
+
+        <!-- Message Input -->
+        <div class="p-4 border-t border-gray-200">
+          <div class="flex space-x-2">
+            <input
+              type="text"
+              bind:value={newMessage}
+              placeholder="Type your message..."
+              class="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+              on:keydown={(e) => e.key === 'Enter' && sendMessage()}
+              disabled={chatLoading}
+            />
+            <button
+              class="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50"
+              on:click={sendMessage}
+              disabled={chatLoading || !newMessage.trim()}
+            >
+              {#if chatLoading}
+                <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              {:else}
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+              {/if}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
 
 <!-- Annotation Modal -->
 {#if showAnnotationModal}
@@ -866,5 +1150,6 @@
       </div>
     </div>
   </div>
+{/if}
 {/if}
 

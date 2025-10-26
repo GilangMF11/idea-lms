@@ -11,9 +11,9 @@
   onMount(() => {
     authStore.init();
     
-    // Redirect if not authenticated or not admin
-    if (!$authStore.isAuthenticated || $authStore.user?.role !== 'ADMIN') {
-      goto('/dashboard');
+    // Redirect if not authenticated
+    if (!$authStore.isAuthenticated) {
+      goto('/login');
       return;
     }
     
@@ -31,7 +31,10 @@
         return;
       }
       
-      const response = await fetch('/api/classes', {
+      // Use different endpoint based on user role
+      const endpoint = $authStore.user?.role === 'ADMIN' ? '/api/classes' : '/api/me/classes';
+      
+      const response = await fetch(endpoint, {
         headers: {
           'Authorization': `Bearer ${$authStore.token}`,
           'Content-Type': 'application/json'
@@ -98,18 +101,24 @@
               </Button>
             </div>
             <div>
-              <h1 class="text-2xl font-bold text-gray-900">All Classes</h1>
-              <p class="text-sm text-gray-600">Manage all classes in the system</p>
+              <h1 class="text-2xl font-bold text-gray-900">
+                {$authStore.user?.role === 'ADMIN' ? 'All Classes' : 'My Classes'}
+              </h1>
+              <p class="text-sm text-gray-600">
+                {$authStore.user?.role === 'ADMIN' ? 'Manage all classes in the system' : 'View your enrolled classes'}
+              </p>
             </div>
           </div>
           
           <div class="flex items-center space-x-4">
-            <Button variant="primary" size="sm">
-              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              Create Class
-            </Button>
+            {#if $authStore.user?.role === 'ADMIN' || $authStore.user?.role === 'TEACHER'}
+              <Button variant="primary" size="sm">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                Create Class
+              </Button>
+            {/if}
           </div>
         </div>
       </div>
@@ -166,20 +175,22 @@
       <div class="card p-6">
         <div class="flex justify-between items-center mb-6">
           <h3 class="text-lg font-semibold text-gray-900">Classes ({classes.length})</h3>
-          <div class="flex space-x-2">
-            <Button variant="secondary" size="sm">
-              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-              </svg>
-              Export
-            </Button>
-            <Button variant="primary" size="sm">
-              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              Create Class
-            </Button>
-          </div>
+          {#if $authStore.user?.role === 'ADMIN' || $authStore.user?.role === 'TEACHER'}
+            <div class="flex space-x-2">
+              <Button variant="secondary" size="sm">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                Export
+              </Button>
+              <Button variant="primary" size="sm">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                Create Class
+              </Button>
+            </div>
+          {/if}
         </div>
 
         {#if classes.length > 0}
@@ -192,7 +203,9 @@
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Students</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  {#if $authStore.user?.role === 'ADMIN' || $authStore.user?.role === 'TEACHER'}
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  {/if}
                 </tr>
               </thead>
               <tbody class="bg-white divide-y divide-gray-200">
@@ -230,22 +243,33 @@
                         {classItem.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div class="flex space-x-2">
+                    {#if $authStore.user?.role === 'ADMIN' || $authStore.user?.role === 'TEACHER'}
+                      <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div class="flex space-x-2">
+                          <button 
+                            class="text-primary-600 hover:text-primary-900"
+                            on:click={() => goto(`/classes/${classItem.id}`)}
+                          >
+                            View
+                          </button>
+                          <button class="text-yellow-600 hover:text-yellow-900">
+                            Edit
+                          </button>
+                          <button class="text-red-600 hover:text-red-900">
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    {:else}
+                      <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <button 
-                          class="text-primary-600 hover:text-primary-900"
+                          class="text-primary-600 hover:text-primary-900 font-medium"
                           on:click={() => goto(`/classes/${classItem.id}`)}
                         >
-                          View
+                          View Class
                         </button>
-                        <button class="text-yellow-600 hover:text-yellow-900">
-                          Edit
-                        </button>
-                        <button class="text-red-600 hover:text-red-900">
-                          Delete
-                        </button>
-                      </div>
-                    </td>
+                      </td>
+                    {/if}
                   </tr>
                 {/each}
               </tbody>

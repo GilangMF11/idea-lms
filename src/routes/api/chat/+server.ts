@@ -6,21 +6,33 @@ import { createHistory } from '$lib/history.js';
 
 export const GET: RequestHandler = async ({ request, url }: { request: any; url: any }) => {
   try {
+    console.log('GET /api/chat - Starting request');
+    
     const authHeader = request.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) {
+      console.log('GET /api/chat - No auth header');
       return json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const token = authHeader.substring(7);
+    console.log('GET /api/chat - Token:', token.substring(0, 20) + '...');
+    
     const user = verifyToken(token);
     if (!user) {
+      console.log('GET /api/chat - Invalid token');
       return json({ error: 'Invalid token' }, { status: 401 });
     }
 
+    console.log('GET /api/chat - User:', user.id);
+
     const classId = url.searchParams.get('classId');
+    const annotationId = url.searchParams.get('annotationId');
     const limit = parseInt(url.searchParams.get('limit') || '50');
 
+    console.log('GET /api/chat - Params:', { classId, annotationId, limit });
+
     if (!classId) {
+      console.log('GET /api/chat - No classId');
       return json({ error: 'Class ID is required' }, { status: 400 });
     }
 
@@ -39,9 +51,25 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
       return json({ error: 'Access denied to this class' }, { status: 403 });
     }
 
+    // If annotationId is provided, validate it exists and belongs to the class
+    if (annotationId) {
+      const annotation = await prisma.annotation.findFirst({
+        where: {
+          id: annotationId,
+          classId: classId
+        }
+      });
+      
+      if (!annotation) {
+        return json({ error: 'Annotation not found or access denied' }, { status: 404 });
+      }
+    }
+
+    console.log('GET /api/chat - Querying messages');
     const messages = await prisma.chatMessage.findMany({
       where: {
         classId,
+        ...(annotationId && { annotationId }), // Filter by annotationId if provided
       },
       include: {
         user: {
@@ -59,6 +87,8 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
       },
       take: limit,
     });
+    
+    console.log('GET /api/chat - Messages found:', messages.length);
 
     return json({ messages });
   } catch (error) {
@@ -80,7 +110,7 @@ export const POST: RequestHandler = async ({ request }) => {
       return json({ error: 'Invalid token' }, { status: 401 });
     }
 
-    const { classId, content } = await request.json();
+    const { classId, content, annotationId } = await request.json();
 
     if (!classId || !content) {
       return json({ error: 'Class ID and content are required' }, { status: 400 });
@@ -101,11 +131,26 @@ export const POST: RequestHandler = async ({ request }) => {
       return json({ error: 'Access denied to this class' }, { status: 403 });
     }
 
+    // If annotationId is provided, validate it exists and belongs to the class
+    if (annotationId) {
+      const annotation = await prisma.annotation.findFirst({
+        where: {
+          id: annotationId,
+          classId: classId
+        }
+      });
+      
+      if (!annotation) {
+        return json({ error: 'Annotation not found or access denied' }, { status: 404 });
+      }
+    }
+
     const message = await prisma.chatMessage.create({
       data: {
         classId,
         userId: user.id,
         content,
+        ...(annotationId && { annotationId }), // Include annotationId if provided
       },
       include: {
         user: {
