@@ -49,7 +49,7 @@
 </script>
 
 <svelte:head>
-  <title>Login - LMS Light</title>
+  <title>Login - LMS IDEA</title>
 </svelte:head>
 
 <div class="auth-container">

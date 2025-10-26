@@ -1,4 +1,4 @@
-# Database Schema - LMS Light
+# Database Schema - LMS IDEA
 
 ## Overview
 Database schema untuk Learning Management System (LMS) Light yang mendukung fitur collaborative learning, writing, dan peer review.

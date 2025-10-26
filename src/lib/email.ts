@@ -100,18 +100,18 @@ export class EmailService {
 
   private getWelcomeTemplate(userName: string): EmailTemplate {
     return {
-      subject: 'Welcome to LMS Light!',
+      subject: 'Welcome to LMS IDEA!',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h1 style="color: #333;">Welcome to LMS Light!</h1>
+          <h1 style="color: #333;">Welcome to LMS IDEA!</h1>
           <p>Hello ${userName},</p>
           <p>Welcome to our Learning Management System! We're excited to have you on board.</p>
           <p>You can now start exploring the platform and join classes to begin your learning journey.</p>
           <p>If you have any questions, feel free to reach out to our support team.</p>
-          <p>Best regards,<br>The LMS Light Team</p>
+          <p>Best regards,<br>The LMS IDEA Team</p>
         </div>
       `,
-      text: `Welcome to LMS Light!\n\nHello ${userName},\n\nWelcome to our Learning Management System! We're excited to have you on board.\n\nYou can now start exploring the platform and join classes to begin your learning journey.\n\nIf you have any questions, feel free to reach out to our support team.\n\nBest regards,\nThe LMS Light Team`,
+      text: `Welcome to LMS IDEA!\n\nHello ${userName},\n\nWelcome to our Learning Management System! We're excited to have you on board.\n\nYou can now start exploring the platform and join classes to begin your learning journey.\n\nIf you have any questions, feel free to reach out to our support team.\n\nBest regards,\nThe LMS IDEA Team`,
     };
   }
 
@@ -129,10 +129,10 @@ export class EmailService {
           <p>You've been invited to join the class <strong>${className}</strong>.</p>
           <p>Class Code: <code style="background: #f4f4f4; padding: 2px 4px; border-radius: 3px;">${classCode}</code></p>
           <p>Use this code to join the class in the LMS platform.</p>
-          <p>Best regards,<br>The LMS Light Team</p>
+          <p>Best regards,<br>The LMS IDEA Team</p>
         </div>
       `,
-      text: `Class Invitation\n\nHello ${userName},\n\nYou've been invited to join the class ${className}.\n\nClass Code: ${classCode}\n\nUse this code to join the class in the LMS platform.\n\nBest regards,\nThe LMS Light Team`,
+      text: `Class Invitation\n\nHello ${userName},\n\nYou've been invited to join the class ${className}.\n\nClass Code: ${classCode}\n\nUse this code to join the class in the LMS platform.\n\nBest regards,\nThe LMS IDEA Team`,
     };
   }
 
@@ -153,10 +153,10 @@ export class EmailService {
           <p><a href="${resetUrl}">${resetUrl}</a></p>
           <p>This link will expire in 1 hour for security reasons.</p>
           <p>If you didn't request this password reset, please ignore this email.</p>
-          <p>Best regards,<br>The LMS Light Team</p>
+          <p>Best regards,<br>The LMS IDEA Team</p>
         </div>
       `,
-      text: `Password Reset Request\n\nHello ${userName},\n\nYou've requested to reset your password. Click the link below to reset your password:\n\n${resetUrl}\n\nThis link will expire in 1 hour for security reasons.\n\nIf you didn't request this password reset, please ignore this email.\n\nBest regards,\nThe LMS Light Team`,
+      text: `Password Reset Request\n\nHello ${userName},\n\nYou've requested to reset your password. Click the link below to reset your password:\n\n${resetUrl}\n\nThis link will expire in 1 hour for security reasons.\n\nIf you didn't request this password reset, please ignore this email.\n\nBest regards,\nThe LMS IDEA Team`,
     };
   }
 
@@ -172,10 +172,10 @@ export class EmailService {
           <h1 style="color: #333;">${title}</h1>
           <p>Hello ${userName},</p>
           <p>${message}</p>
-          <p>Best regards,<br>The LMS Light Team</p>
+          <p>Best regards,<br>The LMS IDEA Team</p>
         </div>
       `,
-      text: `${title}\n\nHello ${userName},\n\n${message}\n\nBest regards,\nThe LMS Light Team`,
+      text: `${title}\n\nHello ${userName},\n\n${message}\n\nBest regards,\nThe LMS IDEA Team`,
     };
   }
 }

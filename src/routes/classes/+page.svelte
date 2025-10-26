@@ -65,7 +65,7 @@
 </script>
 
 <svelte:head>
-  <title>All Classes - LMS Light</title>
+  <title>All Classes - LMS IDEA</title>
 </svelte:head>
 
 {#if loading}

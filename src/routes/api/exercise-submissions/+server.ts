@@ -18,6 +18,8 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
     }
 
     const exerciseId = url.searchParams.get('exerciseId');
+    const userId = url.searchParams.get('userId');
+    
     if (!exerciseId) {
       return json({ error: 'Exercise ID is required' }, { status: 400 });
     }
@@ -42,7 +44,7 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
     const submissions = await prisma.exerciseSubmission.findMany({
       where: {
         exerciseId,
-        ...(user.role === 'STUDENT' ? { userId: user.id } : {}),
+        ...(userId ? { userId } : (user.role === 'STUDENT' ? { userId: user.id } : {})),
       },
       include: {
         user: {
@@ -58,6 +60,12 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
         submittedAt: 'desc',
       },
     });
+
+    // If userId is provided, return single submission for that user
+    if (userId) {
+      const submission = submissions.find(s => s.userId === userId);
+      return json({ submission });
+    }
 
     return json({ submissions });
   } catch (error) {
