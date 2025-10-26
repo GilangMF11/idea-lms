@@ -79,7 +79,27 @@ export const POST: RequestHandler = async ({ request }) => {
       return json({ error: 'Invalid token' }, { status: 401 });
     }
 
-    const { exerciseId, answer } = await request.json();
+    // Handle both JSON and FormData
+    const contentType = request.headers.get('content-type') || '';
+    let exerciseId, answer, files: File[] = [];
+
+    if (contentType.includes('multipart/form-data')) {
+      // Handle file upload
+      const formData = await request.formData();
+      exerciseId = formData.get('exerciseId');
+      answer = formData.get('answer');
+      
+      // Extract files
+      const fileEntries = Array.from(formData.entries())
+        .filter(([key]) => key.startsWith('file_'))
+        .map(([, file]) => file as File);
+      files = fileEntries;
+    } else {
+      // Handle JSON (existing functionality)
+      const body = await request.json();
+      exerciseId = body.exerciseId;
+      answer = body.answer;
+    }
 
     if (!exerciseId || !answer) {
       return json({ error: 'Exercise ID and answer are required' }, { status: 400 });
@@ -132,6 +152,34 @@ export const POST: RequestHandler = async ({ request }) => {
       },
     });
 
+    // Handle file uploads if any
+    let fileUrls = [];
+    if (files.length > 0) {
+      // Store file content and info
+      const fileInfo = [];
+      
+      for (const file of files) {
+        // Read file content
+        const fileContent = await file.text();
+        
+        fileInfo.push({
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          content: fileContent,
+          uploadedAt: new Date().toISOString()
+        });
+      }
+      
+      // Update submission with file info and content
+      await prisma.exerciseSubmission.update({
+        where: { id: submission.id },
+        data: {
+          answer: `${answer}\n\n--- Attached Files ---\n${JSON.stringify(fileInfo, null, 2)}`
+        }
+      });
+    }
+
     // Create history record
     await createHistory({
       tableName: 'exercise_submissions',
@@ -145,6 +193,97 @@ export const POST: RequestHandler = async ({ request }) => {
     return json({ submission }, { status: 201 });
   } catch (error) {
     console.error('Create exercise submission error:', error);
+    return json({ error: 'Internal server error' }, { status: 500 });
+  }
+};
+
+export const PUT: RequestHandler = async ({ request, url }) => {
+  try {
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      return json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const token = authHeader.substring(7);
+    const user = verifyToken(token);
+    if (!user || user.role !== 'TEACHER') {
+      return json({ error: 'Only teachers can grade submissions' }, { status: 403 });
+    }
+
+    const submissionId = url.searchParams.get('id');
+    if (!submissionId) {
+      return json({ error: 'Submission ID is required' }, { status: 400 });
+    }
+
+    const { score, feedback } = await request.json();
+
+    if (score === undefined) {
+      return json({ error: 'Score is required' }, { status: 400 });
+    }
+
+    // Check if submission exists and user has access
+    const submission = await prisma.exerciseSubmission.findFirst({
+      where: {
+        id: submissionId,
+        exercise: {
+          class: {
+            teacherId: user.id,
+          },
+        },
+      },
+      include: {
+        exercise: {
+          select: {
+            classId: true,
+          },
+        },
+      },
+    });
+
+    if (!submission) {
+      return json({ error: 'Submission not found or access denied' }, { status: 404 });
+    }
+
+    const updatedSubmission = await prisma.exerciseSubmission.update({
+      where: { id: submissionId },
+      data: {
+        score: parseInt(score),
+        feedback: feedback || null,
+        updatedAt: new Date(),
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        exercise: {
+          select: {
+            id: true,
+            title: true,
+            classId: true,
+          },
+        },
+      },
+    });
+
+    // Create history entry
+    await createHistory({
+      action: 'UPDATE',
+      tableName: 'exercise_submissions',
+      recordId: submissionId,
+      oldData: submission,
+      newData: updatedSubmission,
+      userId: user.id,
+      classId: submission.exercise.classId,
+    });
+
+    return json({ submission: updatedSubmission });
+  } catch (error) {
+    console.error('Update exercise submission error:', error);
     return json({ error: 'Internal server error' }, { status: 500 });
   }
 };

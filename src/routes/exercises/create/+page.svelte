@@ -9,11 +9,12 @@
 
   let title = '';
   let description = '';
-  let instructions = '';
-  let points = 100;
+  let content = '';
   let dueDate = '';
   let classId = '';
+  let readingTextId = '';
   let classes: any[] = [];
+  let readingTexts: any[] = [];
   let loading = false;
   let error = '';
 
@@ -26,6 +27,7 @@
     // Get classId from URL params
     classId = $page.url.searchParams.get('classId') || '';
     loadClasses();
+    loadReadingTexts();
   });
 
   async function loadClasses() {
@@ -43,6 +45,24 @@
       }
     } catch (err) {
       console.error('Error loading classes:', err);
+    }
+  }
+
+  async function loadReadingTexts() {
+    try {
+      const response = await fetch('/api/reading-texts', {
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        readingTexts = data.readingTexts || [];
+      }
+    } catch (err) {
+      console.error('Error loading reading texts:', err);
     }
   }
 
@@ -70,9 +90,9 @@
         body: JSON.stringify({
           title: title.trim(),
           description: description.trim() || null,
-          instructions: instructions.trim() || null,
+          content: content.trim() || null,
           classId,
-          points: parseInt(points.toString()) || 100,
+          readingTextId: readingTextId || null,
           dueDate: dueDate || null
         })
       });
@@ -161,15 +181,15 @@
               </div>
 
               <div>
-                <label for="instructions" class="block text-sm font-medium text-gray-700 mb-2">
-                  Instructions
+                <label for="content" class="block text-sm font-medium text-gray-700 mb-2">
+                  Exercise Content
                 </label>
                 <textarea
-                  id="instructions"
-                  bind:value={instructions}
+                  id="content"
+                  bind:value={content}
                   rows="4"
                   class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                  placeholder="Enter detailed instructions for students"
+                  placeholder="Enter exercise content and instructions"
                 ></textarea>
               </div>
 
@@ -192,17 +212,19 @@
                 </div>
 
                 <div>
-                  <label for="points" class="block text-sm font-medium text-gray-700 mb-2">
-                    Points
+                  <label for="readingTextId" class="block text-sm font-medium text-gray-700 mb-2">
+                    Related Reading Text
                   </label>
-                  <input
-                    id="points"
-                    type="number"
-                    bind:value={points}
-                    min="1"
-                    max="1000"
+                  <select
+                    id="readingTextId"
+                    bind:value={readingTextId}
                     class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                  />
+                  >
+                    <option value="">No reading text</option>
+                    {#each readingTexts as readingText}
+                      <option value={readingText.id}>{readingText.title}</option>
+                    {/each}
+                  </select>
                 </div>
               </div>
 

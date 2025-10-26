@@ -381,6 +381,44 @@
     goto(`/exercises/create?classId=${$page.params.id}`);
   }
 
+  async function editExercise(exerciseId: string) {
+    goto(`/exercises/${exerciseId}/edit`);
+  }
+
+  async function deleteExercise(exerciseId: string) {
+    if (!confirm('Are you sure you want to delete this exercise? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/exercises', {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ id: exerciseId })
+      });
+
+      if (response.ok) {
+        // Remove exercise from local array
+        exercises = exercises.filter(ex => ex.id !== exerciseId);
+        console.log('Exercise deleted successfully');
+      } else {
+        const error = await response.json();
+        console.error('Failed to delete exercise:', error.error);
+        alert('Failed to delete exercise: ' + error.error);
+      }
+    } catch (error) {
+      console.error('Error deleting exercise:', error);
+      alert('Error deleting exercise');
+    }
+  }
+
+  function viewExercise(exerciseId: string) {
+    goto(`/exercises/${exerciseId}`);
+  }
+
   function createReadingText() {
     goto(`/reading-texts/create?classId=${$page.params.id}`);
   }
@@ -791,8 +829,24 @@
                           {new Date(exercise.createdAt).toLocaleDateString()}
                         </span>
                         <div class="flex space-x-2">
-                          <button class="text-primary-600 hover:text-primary-900 text-xs">Edit</button>
-                          <button class="text-red-600 hover:text-red-900 text-xs">Delete</button>
+                          <button 
+                            class="text-primary-600 hover:text-primary-900 text-xs"
+                            on:click={() => viewExercise(exercise.id)}
+                          >
+                            View
+                          </button>
+                          <button 
+                            class="text-blue-600 hover:text-blue-900 text-xs"
+                            on:click={() => editExercise(exercise.id)}
+                          >
+                            Edit
+                          </button>
+                          <button 
+                            class="text-red-600 hover:text-red-900 text-xs"
+                            on:click={() => deleteExercise(exercise.id)}
+                          >
+                            Delete
+                          </button>
                         </div>
                       </div>
                     </div>
