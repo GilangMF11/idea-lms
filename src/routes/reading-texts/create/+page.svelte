@@ -275,7 +275,7 @@
         <!-- Content Editor -->
         <div>
           <div class="flex justify-between items-center mb-4">
-            <label class="block text-sm font-medium text-gray-700">Content</label>
+            <div class="block text-sm font-medium text-gray-700">Content</div>
             <div class="flex space-x-2">
               <Button type="button" variant="secondary" size="sm" on:click={addTextBlock}>
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -318,9 +318,10 @@
                 {:else if block.type === 'image'}
                   <div class="space-y-3">
                     <div>
-                      <label class="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
+                      <label for="image-url-{index}" class="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
                       <div class="flex space-x-2">
                         <input
+                          id="image-url-{index}"
                           type="text"
                           bind:value={block.url}
                           class="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
@@ -358,8 +359,9 @@
                     </div>
                     
                     <div>
-                      <label class="block text-sm font-medium text-gray-700 mb-1">Caption</label>
+                      <label for="image-caption-{index}" class="block text-sm font-medium text-gray-700 mb-1">Caption</label>
                       <input
+                        id="image-caption-{index}"
                         type="text"
                         bind:value={block.caption}
                         class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"

@@ -129,6 +129,7 @@ model Annotation {
   userId        String
   classId       String
   content       String
+  selectedText  String?  // Text that was selected/highlighted
   startPos      Int
   endPos        Int
   color         String?

@@ -15,6 +15,10 @@
   let annotationText = '';
   let annotationLoading = false;
   let annotationError = '';
+  let editingAnnotation: any = null;
+  let editAnnotationText = '';
+  let showDeleteAnnotationModal = false;
+  let annotationToDelete: any = null;
 
   onMount(() => {
     authStore.init();
@@ -99,6 +103,243 @@
     window.getSelection()?.removeAllRanges();
   }
 
+  function startEditAnnotation(annotation: any) {
+    editingAnnotation = annotation;
+    editAnnotationText = annotation.content;
+  }
+
+  function cancelEditAnnotation() {
+    editingAnnotation = null;
+    editAnnotationText = '';
+  }
+
+  async function updateAnnotation() {
+    if (!editingAnnotation || !editAnnotationText.trim()) {
+      return;
+    }
+
+    try {
+      annotationLoading = true;
+      annotationError = '';
+
+      const response = await fetch('/api/annotations', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          id: editingAnnotation.id,
+          content: editAnnotationText
+        })
+      });
+
+      if (response.ok) {
+        await loadAnnotations();
+        cancelEditAnnotation();
+      } else {
+        const result = await response.json();
+        annotationError = result.error || 'Failed to update annotation';
+      }
+    } catch (err) {
+      console.error('Error updating annotation:', err);
+      annotationError = 'Failed to update annotation';
+    } finally {
+      annotationLoading = false;
+    }
+  }
+
+  function deleteAnnotation(annotation: any) {
+    annotationToDelete = annotation;
+    showDeleteAnnotationModal = true;
+  }
+
+  async function confirmDeleteAnnotation() {
+    if (!annotationToDelete) return;
+
+    try {
+      annotationLoading = true;
+
+      const response = await fetch(`/api/annotations?id=${annotationToDelete.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        await loadAnnotations();
+        closeDeleteAnnotationModal();
+      } else {
+        const result = await response.json();
+        annotationError = result.error || 'Failed to delete annotation';
+      }
+    } catch (err) {
+      console.error('Error deleting annotation:', err);
+      annotationError = 'Failed to delete annotation';
+    } finally {
+      annotationLoading = false;
+    }
+  }
+
+  function closeDeleteAnnotationModal() {
+    showDeleteAnnotationModal = false;
+    annotationToDelete = null;
+  }
+
+  function scrollToSelectedText(annotation: any) {
+    console.log('Scrolling to annotation:', annotation);
+    
+    if (!annotation.startPos || !annotation.endPos) {
+      console.log('Missing position data:', annotation);
+      return;
+    }
+
+    const contentDiv = document.querySelector('.reading-content');
+    if (!contentDiv) {
+      console.log('Content div not found');
+      return;
+    }
+
+    // Clear any existing temporary highlights first
+    const existingHighlights = contentDiv.querySelectorAll('.temp-highlight');
+    existingHighlights.forEach(highlight => {
+      if (highlight.parentNode) {
+        highlight.parentNode.replaceChild(document.createTextNode(highlight.textContent), highlight);
+      }
+    });
+
+    // Find the text node that contains the annotation
+    let targetTextNode = null;
+    let currentOffset = 0;
+    
+    const walker = document.createTreeWalker(
+      contentDiv,
+      NodeFilter.SHOW_TEXT
+    );
+    
+    let node;
+    while (node = walker.nextNode()) {
+      const nodeLength = node.textContent?.length || 0;
+      if (annotation.startPos >= currentOffset && annotation.startPos < currentOffset + nodeLength) {
+        targetTextNode = node;
+        break;
+      }
+      currentOffset += nodeLength;
+    }
+
+    if (!targetTextNode) {
+      console.log('Target text node not found');
+      return;
+    }
+
+    console.log('Found target text node:', targetTextNode.textContent?.substring(0, 50) + '...');
+    console.log('Annotation positions:', annotation.startPos, annotation.endPos);
+
+    try {
+      // Create range for the selected text
+      const range = document.createRange();
+      
+      // Calculate relative positions within the target text node
+      const nodeStartOffset = currentOffset;
+      const relativeStartPos = Math.max(0, annotation.startPos - nodeStartOffset);
+      const relativeEndPos = Math.min(
+        targetTextNode.textContent?.length || 0, 
+        annotation.endPos - nodeStartOffset
+      );
+      
+      console.log('Relative positions:', {
+        nodeStartOffset,
+        relativeStartPos,
+        relativeEndPos,
+        nodeLength: targetTextNode.textContent?.length
+      });
+      
+      range.setStart(targetTextNode, relativeStartPos);
+      range.setEnd(targetTextNode, relativeEndPos);
+
+      console.log('Range created successfully');
+
+      // Scroll to the range
+      const rect = range.getBoundingClientRect();
+      console.log('Range rect:', rect);
+      
+      // Scroll the range into view using the element
+      const element = range.commonAncestorContainer.parentElement || contentDiv;
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      // Create temporary highlight with ORANGE color
+      const span = document.createElement('span');
+      span.className = 'temp-highlight';
+      span.style.cssText = `
+        background-color: #ea580c;
+        color: white;
+        padding: 2px 4px;
+        border-radius: 3px;
+        font-weight: bold;
+        animation: highlightPulseOrange 3s ease-in-out;
+        box-shadow: 0 0 10px rgba(234, 88, 12, 0.5);
+        display: inline;
+      `;
+      
+      // Add highlight animation with ORANGE colors
+      const style = document.createElement('style');
+      style.textContent = `
+        @keyframes highlightPulseOrange {
+          0% { 
+            background-color: #ea580c;
+            transform: scale(1);
+            box-shadow: 0 0 10px rgba(234, 88, 12, 0.5);
+          }
+          25% { 
+            background-color: #dc2626;
+            transform: scale(1.05);
+            box-shadow: 0 0 15px rgba(220, 38, 38, 0.7);
+          }
+          50% { 
+            background-color: #b91c1c;
+            transform: scale(1.1);
+            box-shadow: 0 0 20px rgba(185, 28, 28, 0.8);
+          }
+          75% { 
+            background-color: #dc2626;
+            transform: scale(1.05);
+            box-shadow: 0 0 15px rgba(220, 38, 38, 0.7);
+          }
+          100% { 
+            background-color: #ea580c;
+            transform: scale(1);
+            box-shadow: 0 0 10px rgba(234, 88, 12, 0.5);
+          }
+        }
+      `;
+      
+      // Check if style already exists
+      if (!document.querySelector('#highlight-animation-orange-style')) {
+        style.id = 'highlight-animation-orange-style';
+        document.head.appendChild(style);
+      }
+
+      range.surroundContents(span);
+      console.log('Highlight applied successfully');
+
+      // Remove highlight after 3 seconds
+      setTimeout(() => {
+        if (span.parentNode) {
+          span.parentNode.replaceChild(document.createTextNode(span.textContent), span);
+          console.log('Highlight removed');
+        }
+      }, 3000);
+
+    } catch (e) {
+      console.error('Error highlighting text:', e);
+      
+      // Fallback: just scroll to content
+      contentDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
   async function createAnnotation() {
     if (!annotationText.trim()) {
       annotationError = 'Please enter your annotation';
@@ -121,6 +362,7 @@
           readingTextId: $page.params.id,
           classId: readingText?.classId,
           content: annotationText,
+          selectedText: selectedText,
           startPos: position?.startOffset || 0,
           endPos: position?.endOffset || 0,
           color: '#fef3c7' // Default yellow color
@@ -156,6 +398,101 @@
       top: rect.top,
       left: rect.left
     };
+  }
+
+  function highlightAnnotatedText() {
+    if (!readingText || !annotations.length) return;
+
+    // Clear existing highlights
+    const contentDiv = document.querySelector('.reading-content');
+    if (!contentDiv) return;
+
+    // Remove existing annotation markers (but not temporary highlight spans)
+    const existingMarkers = contentDiv.querySelectorAll('.annotation-marker');
+    existingMarkers.forEach(marker => marker.remove());
+
+    // Get all text content from the div
+    const fullText = contentDiv.textContent || '';
+    console.log('Full text content:', fullText.substring(0, 100) + '...');
+
+    // Add highlights for each annotation
+    annotations.forEach(annotation => {
+      if (annotation.selectedText && annotation.startPos !== undefined && annotation.endPos !== undefined) {
+        console.log('Processing annotation:', {
+          selectedText: annotation.selectedText,
+          startPos: annotation.startPos,
+          endPos: annotation.endPos
+        });
+
+        // Find the text node that contains the annotation
+        let targetTextNode = null;
+        let currentOffset = 0;
+        
+        const walker = document.createTreeWalker(
+          contentDiv,
+          NodeFilter.SHOW_TEXT
+        );
+        
+        let node;
+        while (node = walker.nextNode()) {
+          const nodeLength = node.textContent?.length || 0;
+          if (annotation.startPos >= currentOffset && annotation.startPos < currentOffset + nodeLength) {
+            targetTextNode = node;
+            break;
+          }
+          currentOffset += nodeLength;
+        }
+
+        if (targetTextNode) {
+          console.log('Found target text node:', targetTextNode.textContent?.substring(0, 50) + '...');
+          
+          const range = document.createRange();
+          try {
+            // Calculate relative positions within the target text node
+            const nodeStartOffset = currentOffset;
+            const relativeStartPos = Math.max(0, annotation.startPos - nodeStartOffset);
+            const relativeEndPos = Math.min(
+              targetTextNode.textContent?.length || 0, 
+              annotation.endPos - nodeStartOffset
+            );
+            
+            console.log('Relative positions:', {
+              nodeStartOffset,
+              relativeStartPos,
+              relativeEndPos,
+              nodeLength: targetTextNode.textContent?.length
+            });
+            
+            range.setStart(targetTextNode, relativeStartPos);
+            range.setEnd(targetTextNode, relativeEndPos);
+            
+            const span = document.createElement('span');
+            span.className = 'annotation-marker';
+            span.style.cssText = `
+              cursor: pointer;
+              position: relative;
+              transition: all 0.2s ease;
+            `;
+            span.title = `Annotation: ${annotation.content}`;
+            span.onclick = () => scrollToSelectedText(annotation);
+            
+            // No hover effect needed since there's no visual element
+            
+            range.surroundContents(span);
+            console.log('Successfully highlighted annotation');
+          } catch (e) {
+            console.warn('Could not highlight annotation:', e);
+          }
+        } else {
+          console.warn('Could not find target text node for annotation');
+        }
+      }
+    });
+  }
+
+  // Reactive statement to highlight when annotations change
+  $: if (readingText && annotations.length > 0) {
+    setTimeout(highlightAnnotatedText, 100);
   }
 
   function goBack() {
@@ -237,9 +574,16 @@
           <div class="card p-8">
             <div class="prose prose-lg max-w-none">
               <div 
-                class="text-gray-900 leading-relaxed select-text cursor-text"
-                on:mousedown={handleTextSelection}
-                on:mouseup={handleTextSelection}
+                class="text-gray-900 leading-relaxed select-text cursor-text reading-content"
+                role="textbox"
+                tabindex="0"
+                on:click={handleTextSelection}
+                on:keydown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleTextSelection();
+                  }
+                }}
               >
                 {@html readingText.content}
               </div>
@@ -277,10 +621,74 @@
                           </p>
                         </div>
                       </div>
+                      
+                      {#if ['ADMIN', 'TEACHER'].includes($authStore.user?.role || '')}
+                        <div class="flex space-x-2">
+                          <button
+                            class="text-blue-600 hover:text-blue-800 text-xs"
+                            on:click={() => startEditAnnotation(annotation)}
+                            disabled={annotationLoading}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            class="text-red-600 hover:text-red-800 text-xs"
+                            on:click={() => deleteAnnotation(annotation)}
+                            disabled={annotationLoading}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      {/if}
                     </div>
                     
+                    {#if annotation.selectedText}
+                      <div class="mb-2 p-2 bg-orange-50 border-l-4 border-orange-400 rounded cursor-pointer hover:bg-orange-100 transition-colors" 
+                           on:click={() => scrollToSelectedText(annotation)}
+                           role="button"
+                           tabindex="0"
+                           on:keydown={(e) => e.key === 'Enter' && scrollToSelectedText(annotation)}>
+                        <div class="text-xs font-medium text-orange-800 mb-1 flex items-center">
+                          <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                          Selected Text (click to locate):
+                        </div>
+                        <div class="text-sm text-orange-700 italic">"{annotation.selectedText}"</div>
+                      </div>
+                    {/if}
+                    
                     <div class="text-sm text-gray-900">
-                      {annotation.content}
+                      <div class="font-medium text-gray-700 mb-1">Annotation:</div>
+                      {#if editingAnnotation && editingAnnotation.id === annotation.id}
+                        <div class="space-y-2">
+                          <textarea
+                            bind:value={editAnnotationText}
+                            rows="3"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-sm"
+                            placeholder="Enter your annotation..."
+                          ></textarea>
+                          <div class="flex space-x-2">
+                            <button
+                              class="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50"
+                              on:click={updateAnnotation}
+                              disabled={annotationLoading || !editAnnotationText.trim()}
+                            >
+                              {annotationLoading ? 'Saving...' : 'Save'}
+                            </button>
+                            <button
+                              class="px-3 py-1 bg-gray-500 text-white text-xs rounded hover:bg-gray-600"
+                              on:click={cancelEditAnnotation}
+                              disabled={annotationLoading}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      {:else}
+                        {annotation.content}
+                      {/if}
                     </div>
                   </div>
                 {/each}
@@ -326,6 +734,13 @@
           </button>
         </div>
 
+      {#if selectedText}
+        <div class="mb-6 p-4 bg-orange-50 border-l-4 border-orange-400 rounded">
+          <div class="text-sm font-medium text-orange-800 mb-2">Selected Text:</div>
+          <div class="text-sm text-orange-700 italic">"{selectedText}"</div>
+        </div>
+      {/if}
+
         <div class="mb-6">
           <label for="annotation" class="block text-sm font-medium text-gray-700 mb-2">
             Your Annotation
@@ -360,6 +775,93 @@
             {/if}
             {annotationLoading ? 'Adding...' : 'Add Annotation'}
           </Button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Delete Annotation Confirmation Modal -->
+{#if showDeleteAnnotationModal && annotationToDelete}
+  <div 
+    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    role="dialog"
+    aria-modal="true"
+  >
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+      <div class="p-6">
+        <!-- Header -->
+        <div class="flex items-center mb-4">
+          <div class="flex-shrink-0">
+            <div class="h-10 w-10 bg-red-100 rounded-full flex items-center justify-center">
+              <svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+          </div>
+          <div class="ml-4">
+            <h3 class="text-lg font-semibold text-gray-900">Delete Annotation</h3>
+            <p class="text-sm text-gray-500">This action cannot be undone</p>
+          </div>
+        </div>
+
+        <!-- Content -->
+        <div class="mb-6">
+          <div class="bg-gray-50 rounded-lg p-4 mb-4">
+            <div class="text-sm font-medium text-gray-900 mb-2">
+              Annotation by {annotationToDelete.user?.firstName} {annotationToDelete.user?.lastName}
+            </div>
+            <div class="text-sm text-gray-700">
+              {annotationToDelete.content}
+            </div>
+            {#if annotationToDelete.selectedText}
+              <div class="mt-2 text-sm text-blue-600 italic">
+                "{annotationToDelete.selectedText}"
+              </div>
+            {/if}
+          </div>
+
+          <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div class="flex">
+              <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div class="ml-3">
+                <h3 class="text-sm font-medium text-red-800">Warning</h3>
+                <div class="mt-2 text-sm text-red-700">
+                  <p>This annotation will be permanently deleted and cannot be recovered.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex justify-end space-x-3">
+          <button 
+            type="button" 
+            class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+            on:click={closeDeleteAnnotationModal}
+            disabled={annotationLoading}
+          >
+            Cancel
+          </button>
+          <button 
+            type="button" 
+            class="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
+            on:click={confirmDeleteAnnotation}
+            disabled={annotationLoading}
+          >
+            {#if annotationLoading}
+              <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            {/if}
+            {annotationLoading ? 'Deleting...' : 'Delete Annotation'}
+          </button>
         </div>
       </div>
     </div>

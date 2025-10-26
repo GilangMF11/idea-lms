@@ -70,7 +70,7 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
     }
 
     const body = await request.json();
-    const { readingTextId, classId, content, startPos, endPos, color } = body;
+    const { readingTextId, classId, content, selectedText, startPos, endPos, color } = body;
 
     if (!readingTextId || !classId || !content || startPos === undefined || endPos === undefined) {
       return json({ error: 'Reading text ID, class ID, content, start position, and end position are required' }, { status: 400 });
@@ -91,10 +91,11 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
         userId: user.id,
         classId,
         content,
+        selectedText: selectedText || null,
         startPos,
         endPos,
         color: color || null
-      },
+      } as any,
       include: {
         user: {
           select: {
@@ -130,17 +131,29 @@ export const PUT: RequestHandler = async ({ request }: { request: any }) => {
       return json({ error: 'Annotation ID and content are required' }, { status: 400 });
     }
 
-    // Check if annotation exists and user owns it
+    // Check if annotation exists and user can edit it
     const existingAnnotation = await prisma.annotation.findUnique({
-      where: { id }
+      where: { id },
+      include: {
+        readingText: {
+          include: {
+            class: true
+          }
+        }
+      }
     });
 
     if (!existingAnnotation) {
       return json({ error: 'Annotation not found' }, { status: 404 });
     }
 
-    if (existingAnnotation.userId !== user.id) {
-      return json({ error: 'You can only edit your own annotations' }, { status: 403 });
+    // Allow edit if user owns the annotation OR is admin/teacher of the class
+    const canEdit = existingAnnotation.userId === user.id || 
+                   user.role === 'ADMIN' || 
+                   (user.role === 'TEACHER' && existingAnnotation.readingText.class.teacherId === user.id);
+
+    if (!canEdit) {
+      return json({ error: 'You can only edit your own annotations or be admin/teacher of the class' }, { status: 403 });
     }
 
     const updatedAnnotation = await prisma.annotation.update({
@@ -180,17 +193,29 @@ export const DELETE: RequestHandler = async ({ request, url }: { request: any; u
       return json({ error: 'Annotation ID is required' }, { status: 400 });
     }
 
-    // Check if annotation exists and user owns it
+    // Check if annotation exists and user can delete it
     const existingAnnotation = await prisma.annotation.findUnique({
-      where: { id }
+      where: { id },
+      include: {
+        readingText: {
+          include: {
+            class: true
+          }
+        }
+      }
     });
 
     if (!existingAnnotation) {
       return json({ error: 'Annotation not found' }, { status: 404 });
     }
 
-    if (existingAnnotation.userId !== user.id) {
-      return json({ error: 'You can only delete your own annotations' }, { status: 403 });
+    // Allow delete if user owns the annotation OR is admin/teacher of the class
+    const canDelete = existingAnnotation.userId === user.id || 
+                     user.role === 'ADMIN' || 
+                     (user.role === 'TEACHER' && existingAnnotation.readingText.class.teacherId === user.id);
+
+    if (!canDelete) {
+      return json({ error: 'You can only delete your own annotations or be admin/teacher of the class' }, { status: 403 });
     }
 
     await prisma.annotation.delete({
