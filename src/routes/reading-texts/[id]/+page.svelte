@@ -1,0 +1,368 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
+  import { authStore } from '$lib/stores/auth.js';
+  import Button from '$lib/components/Button.svelte';
+  import Alert from '$lib/components/Alert.svelte';
+
+  let readingText: any = null;
+  let annotations: any[] = [];
+  let loading = true;
+  let error = '';
+  let selectedText = '';
+  let showAnnotationModal = false;
+  let annotationText = '';
+  let annotationLoading = false;
+  let annotationError = '';
+
+  onMount(() => {
+    authStore.init();
+    
+    // Redirect if not authenticated
+    if (!$authStore.isAuthenticated) {
+      goto('/login');
+      return;
+    }
+    
+    loadReadingText();
+    loadAnnotations();
+  });
+
+  async function loadReadingText() {
+    try {
+      loading = true;
+      const textId = $page.params.id;
+      
+      if (!textId) {
+        error = 'Reading text ID not found';
+        return;
+      }
+
+      const response = await fetch(`/api/reading-texts?id=${textId}`, {
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        readingText = result.readingText;
+      } else {
+        error = 'Failed to load reading text';
+      }
+    } catch (err) {
+      console.error('Error loading reading text:', err);
+      error = 'Failed to load reading text';
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function loadAnnotations() {
+    try {
+      const textId = $page.params.id;
+      
+      const response = await fetch(`/api/annotations?readingTextId=${textId}`, {
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        annotations = result.annotations || [];
+      }
+    } catch (err) {
+      console.error('Error loading annotations:', err);
+    }
+  }
+
+  function handleTextSelection() {
+    const selection = window.getSelection();
+    if (selection && selection.toString().trim()) {
+      selectedText = selection.toString().trim();
+      showAnnotationModal = true;
+      annotationText = '';
+      annotationError = '';
+    }
+  }
+
+  function closeAnnotationModal() {
+    showAnnotationModal = false;
+    selectedText = '';
+    annotationText = '';
+    annotationError = '';
+    // Clear selection
+    window.getSelection()?.removeAllRanges();
+  }
+
+  async function createAnnotation() {
+    if (!annotationText.trim()) {
+      annotationError = 'Please enter your annotation';
+      return;
+    }
+
+    try {
+      annotationLoading = true;
+      annotationError = '';
+
+      const position = getSelectionPosition();
+      
+      const response = await fetch('/api/annotations', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          readingTextId: $page.params.id,
+          classId: readingText?.classId,
+          content: annotationText,
+          startPos: position?.startOffset || 0,
+          endPos: position?.endOffset || 0,
+          color: '#fef3c7' // Default yellow color
+        })
+      });
+
+      if (response.ok) {
+        // Reload annotations
+        await loadAnnotations();
+        closeAnnotationModal();
+      } else {
+        const result = await response.json();
+        annotationError = result.error || 'Failed to create annotation';
+      }
+    } catch (err) {
+      console.error('Error creating annotation:', err);
+      annotationError = 'Failed to create annotation';
+    } finally {
+      annotationLoading = false;
+    }
+  }
+
+  function getSelectionPosition() {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return null;
+    
+    const range = selection.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    
+    return {
+      startOffset: range.startOffset,
+      endOffset: range.endOffset,
+      top: rect.top,
+      left: rect.left
+    };
+  }
+
+  function goBack() {
+    goto('/dashboard');
+  }
+
+  function handleKeydown(event: Event) {
+    const e = event as KeyboardEvent;
+    if (e.key === 'Escape') {
+      closeAnnotationModal();
+    }
+  }
+</script>
+
+<svelte:window on:keydown={handleKeydown} />
+
+{#if loading}
+  <div class="min-h-screen flex items-center justify-center bg-gray-50">
+    <div class="text-center">
+      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+      <p class="mt-4 text-gray-600">Loading reading text...</p>
+    </div>
+  </div>
+{:else if error}
+  <div class="min-h-screen flex items-center justify-center bg-gray-50">
+    <div class="max-w-md w-full">
+      <Alert type="error" message={error} />
+      <div class="mt-4 text-center">
+        <Button variant="primary" on:click={goBack}>Back</Button>
+      </div>
+    </div>
+  </div>
+{:else if readingText}
+  <div class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <header class="bg-white shadow-sm border-b border-gray-200">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center py-4">
+          <div class="flex items-center">
+            <div class="mr-4">
+              <Button variant="secondary" size="sm" on:click={goBack}>
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                </svg>
+                Back
+              </Button>
+            </div>
+            <div>
+              <h1 class="text-2xl font-bold text-gray-900">{readingText.title}</h1>
+              <p class="text-sm text-gray-600">
+                {readingText.author ? `by ${readingText.author}` : 'Unknown author'}
+                {readingText.source ? ` • ${readingText.source}` : ''}
+              </p>
+            </div>
+          </div>
+          
+          <div class="flex items-center space-x-4">
+            <div class="text-right">
+              <p class="text-sm font-medium text-gray-900">
+                {annotations.length} Annotations
+              </p>
+              <p class="text-xs text-gray-500">Collaborative Reading</p>
+            </div>
+            <div class="h-10 w-10 bg-primary-600 rounded-full flex items-center justify-center">
+              <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <!-- Reading Text -->
+        <div class="lg:col-span-2">
+          <div class="card p-8">
+            <div class="prose prose-lg max-w-none">
+              <div 
+                class="text-gray-900 leading-relaxed select-text cursor-text"
+                on:mousedown={handleTextSelection}
+                on:mouseup={handleTextSelection}
+              >
+                {@html readingText.content}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Annotations Sidebar -->
+        <div class="lg:col-span-1">
+          <div class="card p-6">
+            <div class="flex items-center justify-between mb-6">
+              <h3 class="text-lg font-semibold text-gray-900">Annotations</h3>
+              <span class="bg-primary-100 text-primary-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                {annotations.length}
+              </span>
+            </div>
+
+            {#if annotations.length > 0}
+              <div class="space-y-4 max-h-96 overflow-y-auto">
+                {#each annotations as annotation}
+                  <div class="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                    <div class="flex items-start justify-between mb-2">
+                      <div class="flex items-center">
+                        <div class="h-8 w-8 bg-primary-100 rounded-full flex items-center justify-center mr-3">
+                          <span class="text-sm font-medium text-primary-600">
+                            {annotation.user?.firstName?.charAt(0)}{annotation.user?.lastName?.charAt(0)}
+                          </span>
+                        </div>
+                        <div>
+                          <p class="text-sm font-medium text-gray-900">
+                            {annotation.user?.firstName} {annotation.user?.lastName}
+                          </p>
+                          <p class="text-xs text-gray-500">
+                            {new Date(annotation.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div class="text-sm text-gray-900">
+                      {annotation.content}
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {:else}
+              <div class="text-center py-8">
+                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                </svg>
+                <h3 class="mt-2 text-sm font-medium text-gray-900">No annotations yet</h3>
+                <p class="mt-1 text-sm text-gray-500">Select text to add your first annotation</p>
+              </div>
+            {/if}
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+{/if}
+
+<!-- Annotation Modal -->
+{#if showAnnotationModal}
+  <div 
+    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    role="dialog"
+    aria-modal="true"
+    tabindex="-1"
+  >
+    <div 
+      class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+    >
+      <div class="p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold text-gray-900">Add Annotation</h3>
+          <button 
+            class="text-gray-400 hover:text-gray-600"
+            on:click={closeAnnotationModal}
+            aria-label="Close annotation modal"
+          >
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="mb-6">
+          <label for="annotation" class="block text-sm font-medium text-gray-700 mb-2">
+            Your Annotation
+          </label>
+          <textarea
+            id="annotation"
+            bind:value={annotationText}
+            rows="4"
+            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+            placeholder="Share your thoughts, ask questions, or start a discussion..."
+          ></textarea>
+        </div>
+
+        {#if annotationError}
+          <Alert type="error" message={annotationError} />
+        {/if}
+
+        <div class="flex justify-end space-x-3">
+          <Button variant="secondary" on:click={closeAnnotationModal} disabled={annotationLoading}>
+            Cancel
+          </Button>
+          <Button 
+            variant="primary" 
+            on:click={createAnnotation} 
+            disabled={annotationLoading || !annotationText.trim()}
+          >
+            {#if annotationLoading}
+              <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            {/if}
+            {annotationLoading ? 'Adding...' : 'Add Annotation'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+

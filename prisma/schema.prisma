@@ -1,0 +1,330 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+enum ExerciseType {
+  INDIVIDUAL
+  GROUP
+}
+
+enum ReviewType {
+  PERSUASIVE
+  INTERACTIVE
+}
+
+enum RevisionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  FINISHED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  username  String   @unique
+  password  String
+  firstName String
+  lastName  String
+  role      UserRole @default(STUDENT)
+  avatar    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  classesAsStudent    ClassStudent[]
+  classesAsTeacher    Class[]
+  annotations         Annotation[]
+  chatMessages        ChatMessage[]
+  exerciseSubmissions ExerciseSubmission[]
+  writingOutlines     WritingOutline[]
+  writingDrafts       WritingDraft[]
+  peerReviews         PeerReview[]
+  revisions           Revision[]
+  revisionComments    RevisionComment[]
+  finalProducts       FinalProduct[]
+  History             History[]
+
+  @@map("users")
+}
+
+model Class {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  code        String   @unique
+  teacherId   String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  teacher         User             @relation(fields: [teacherId], references: [id])
+  students        ClassStudent[]
+  readingTexts    ReadingText[]
+  exercises       Exercise[]
+  writingOutlines WritingOutline[]
+  writingDrafts   WritingDraft[]
+  chatMessages    ChatMessage[]
+  annotations     Annotation[]
+  peerReviews     PeerReview[]
+  revisions       Revision[]
+  finalProducts   FinalProduct[]
+  History         History[]
+
+  @@map("classes")
+}
+
+model ClassStudent {
+  id        String   @id @default(cuid())
+  classId   String
+  studentId String
+  joinedAt  DateTime @default(now())
+
+  // Relations
+  class   Class @relation(fields: [classId], references: [id])
+  student User  @relation(fields: [studentId], references: [id])
+
+  @@unique([classId, studentId])
+  @@map("class_students")
+}
+
+model ReadingText {
+  id        String   @id @default(cuid())
+  title     String
+  content   String
+  classId   String
+  author    String?
+  source    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  class       Class        @relation(fields: [classId], references: [id])
+  annotations Annotation[]
+  exercises   Exercise[]
+
+  @@map("reading_texts")
+}
+
+model Annotation {
+  id            String   @id @default(cuid())
+  readingTextId String
+  userId        String
+  classId       String
+  content       String
+  startPos      Int
+  endPos        Int
+  color         String?
+  isPublic      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  readingText ReadingText @relation(fields: [readingTextId], references: [id])
+  user        User        @relation(fields: [userId], references: [id])
+  class       Class       @relation(fields: [classId], references: [id])
+
+  @@map("annotations")
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  classId   String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  class Class @relation(fields: [classId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@map("chat_messages")
+}
+
+model Exercise {
+  id            String       @id @default(cuid())
+  title         String
+  description   String?
+  content       String
+  type          ExerciseType @default(INDIVIDUAL)
+  readingTextId String?
+  classId       String
+  dueDate       DateTime?
+  isActive      Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  // Relations
+  readingText ReadingText?         @relation(fields: [readingTextId], references: [id])
+  class       Class                @relation(fields: [classId], references: [id])
+  submissions ExerciseSubmission[]
+
+  @@map("exercises")
+}
+
+model ExerciseSubmission {
+  id          String   @id @default(cuid())
+  exerciseId  String
+  userId      String
+  answer      String
+  score       Float?
+  feedback    String?
+  submittedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  exercise Exercise @relation(fields: [exerciseId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@unique([exerciseId, userId])
+  @@map("exercise_submissions")
+}
+
+model WritingOutline {
+  id        String   @id @default(cuid())
+  title     String
+  content   String // JSON data for mind map
+  userId    String
+  classId   String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user   User           @relation(fields: [userId], references: [id])
+  class  Class          @relation(fields: [classId], references: [id])
+  drafts WritingDraft[]
+
+  @@map("writing_outlines")
+}
+
+model WritingDraft {
+  id        String   @id @default(cuid())
+  title     String
+  content   String
+  outlineId String?
+  userId    String
+  classId   String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  outline       WritingOutline? @relation(fields: [outlineId], references: [id])
+  user          User            @relation(fields: [userId], references: [id])
+  class         Class           @relation(fields: [classId], references: [id])
+  peerReviews   PeerReview[]
+  revisions     Revision[]
+  finalProducts FinalProduct[]
+
+  @@map("writing_drafts")
+}
+
+model PeerReview {
+  id         String     @id @default(cuid())
+  draftId    String
+  reviewerId String
+  classId    String
+  type       ReviewType @default(INTERACTIVE)
+  comment    String
+  rating     Int? // 1-5 scale
+  isPositive Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  // Relations
+  draft    WritingDraft @relation(fields: [draftId], references: [id])
+  reviewer User         @relation(fields: [reviewerId], references: [id])
+  class    Class        @relation(fields: [classId], references: [id])
+
+  @@map("peer_reviews")
+}
+
+model Revision {
+  id        String         @id @default(cuid())
+  draftId   String
+  userId    String
+  classId   String
+  status    RevisionStatus @default(PENDING)
+  content   String
+  feedback  String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  // Relations
+  draft    WritingDraft      @relation(fields: [draftId], references: [id])
+  user     User              @relation(fields: [userId], references: [id])
+  class    Class             @relation(fields: [classId], references: [id])
+  comments RevisionComment[]
+
+  @@map("revisions")
+}
+
+model RevisionComment {
+  id         String   @id @default(cuid())
+  revisionId String
+  userId     String
+  comment    String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  revision Revision @relation(fields: [revisionId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@map("revision_comments")
+}
+
+model FinalProduct {
+  id        String   @id @default(cuid())
+  title     String
+  content   String
+  draftId   String
+  userId    String
+  classId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  draft WritingDraft @relation(fields: [draftId], references: [id])
+  user  User         @relation(fields: [userId], references: [id])
+  class Class        @relation(fields: [classId], references: [id])
+
+  @@map("final_products")
+}
+
+model History {
+  id        String   @id @default(cuid())
+  tableName String
+  recordId  String
+  action    String // CREATE, UPDATE, DELETE
+  oldData   String? // JSON
+  newData   String? // JSON
+  userId    String?
+  classId   String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  user  User?  @relation(fields: [userId], references: [id])
+  class Class? @relation(fields: [classId], references: [id])
+
+  @@map("histories")
+}
