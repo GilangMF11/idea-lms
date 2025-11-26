@@ -82,7 +82,7 @@
 </script>
 
 <svelte:head>
-  <title>Register - LMS IDEA</title>
+  <title>Register - LMS Light</title>
 </svelte:head>
 
 <div class="auth-container">

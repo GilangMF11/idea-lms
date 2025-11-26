@@ -40,14 +40,6 @@
     
     loadReadingText();
     loadAnnotations();
-    
-    // Cleanup function
-    return () => {
-      stopPolling();
-      if (chatSocket) {
-        chatSocket.close();
-      }
-    };
   });
 
   async function loadReadingText() {
@@ -243,58 +235,34 @@
   function setupWebSocket() {
     if (chatSocket) {
       chatSocket.close();
-      chatSocket = null;
     }
     
-    // Skip WebSocket setup for now since SvelteKit doesn't have built-in WebSocket support
-    // We'll use polling instead for real-time updates
-    console.log('Using polling for real-time updates (WebSocket not available)');
+    // Setup WebSocket connection for real-time updates
+    const wsUrl = `ws://localhost:5174/api/ws?token=${$authStore.token}`;
+    chatSocket = new WebSocket(wsUrl);
     
-    // Set up polling for new messages
-    if (selectedAnnotationForChat) {
-      startPolling();
-    }
-  }
-
-  let pollingInterval: any = null;
-
-  function startPolling() {
-    if (pollingInterval) {
-      clearInterval(pollingInterval);
-    }
+    chatSocket.onopen = () => {
+      console.log('WebSocket connected');
+    };
     
-    // Poll for new messages every 3 seconds
-    pollingInterval = setInterval(async () => {
-      if (selectedAnnotationForChat && showChatModal) {
-        try {
-          const response = await fetch(`/api/chat?classId=${readingText?.classId}&annotationId=${selectedAnnotationForChat.id}`, {
-            headers: {
-              'Authorization': `Bearer ${$authStore.token}`,
-              'Content-Type': 'application/json'
-            }
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            const newMessages = data.messages || [];
-            
-            // Only update if we have new messages
-            if (newMessages.length > chatMessages.length) {
-              chatMessages = newMessages;
-            }
-          }
-        } catch (error) {
-          console.error('Error polling for messages:', error);
+    chatSocket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'chat_message' && data.message.annotationId === selectedAnnotationForChat?.id) {
+          chatMessages = [...chatMessages, data.message];
         }
+      } catch (err) {
+        console.error('Error parsing WebSocket message:', err);
       }
-    }, 3000);
-  }
-
-  function stopPolling() {
-    if (pollingInterval) {
-      clearInterval(pollingInterval);
-      pollingInterval = null;
-    }
+    };
+    
+    chatSocket.onclose = () => {
+      console.log('WebSocket disconnected');
+    };
+    
+    chatSocket.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
   }
 
   function openChatModal(annotation: any) {
@@ -310,9 +278,6 @@
     newMessage = '';
     chatMessages = [];
     chatError = '';
-    
-    // Stop polling when closing chat modal
-    stopPolling();
     
     if (chatSocket) {
       chatSocket.close();
@@ -345,8 +310,13 @@
         chatMessages = [...chatMessages, data.message];
         newMessage = '';
         
-        // Message sent successfully, polling will pick up any other new messages
-        console.log('Message sent successfully');
+        // Send via WebSocket for real-time updates
+        if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+          chatSocket.send(JSON.stringify({
+            type: 'chat_message',
+            message: data.message
+          }));
+        }
       } else {
         chatError = 'Failed to send message';
       }
@@ -894,7 +864,7 @@
       role="dialog"
       aria-modal="true"
       tabindex="0"
-      on:click={(e) => e.target === e.currentTarget && closeChatModal()}
+      on:click={closeChatModal}
       on:keydown={(e) => e.key === 'Escape' && closeChatModal()}
     >
       <div 

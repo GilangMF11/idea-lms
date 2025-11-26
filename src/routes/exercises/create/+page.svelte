@@ -9,12 +9,11 @@
 
   let title = '';
   let description = '';
-  let content = '';
+  let instructions = '';
+  let points = 100;
   let dueDate = '';
   let classId = '';
-  let readingTextId = '';
   let classes: any[] = [];
-  let readingTexts: any[] = [];
   let loading = false;
   let error = '';
 
@@ -27,7 +26,6 @@
     // Get classId from URL params
     classId = $page.url.searchParams.get('classId') || '';
     loadClasses();
-    loadReadingTexts();
   });
 
   async function loadClasses() {
@@ -45,24 +43,6 @@
       }
     } catch (err) {
       console.error('Error loading classes:', err);
-    }
-  }
-
-  async function loadReadingTexts() {
-    try {
-      const response = await fetch('/api/reading-texts', {
-        headers: {
-          'Authorization': `Bearer ${$authStore.token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        readingTexts = data.readingTexts || [];
-      }
-    } catch (err) {
-      console.error('Error loading reading texts:', err);
     }
   }
 
@@ -90,9 +70,9 @@
         body: JSON.stringify({
           title: title.trim(),
           description: description.trim() || null,
-          content: content.trim() || null,
+          instructions: instructions.trim() || null,
           classId,
-          readingTextId: readingTextId || null,
+          points: parseInt(points.toString()) || 100,
           dueDate: dueDate || null
         })
       });
@@ -123,7 +103,7 @@
 </script>
 
 <svelte:head>
-  <title>Create Exercise - LMS IDEA</title>
+  <title>Create Exercise - LMS Light</title>
 </svelte:head>
 
 <div class="min-h-screen bg-gray-50">
@@ -181,15 +161,15 @@
               </div>
 
               <div>
-                <label for="content" class="block text-sm font-medium text-gray-700 mb-2">
-                  Exercise Content
+                <label for="instructions" class="block text-sm font-medium text-gray-700 mb-2">
+                  Instructions
                 </label>
                 <textarea
-                  id="content"
-                  bind:value={content}
+                  id="instructions"
+                  bind:value={instructions}
                   rows="4"
                   class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                  placeholder="Enter exercise content and instructions"
+                  placeholder="Enter detailed instructions for students"
                 ></textarea>
               </div>
 
@@ -212,19 +192,17 @@
                 </div>
 
                 <div>
-                  <label for="readingTextId" class="block text-sm font-medium text-gray-700 mb-2">
-                    Related Reading Text
+                  <label for="points" class="block text-sm font-medium text-gray-700 mb-2">
+                    Points
                   </label>
-                  <select
-                    id="readingTextId"
-                    bind:value={readingTextId}
+                  <input
+                    id="points"
+                    type="number"
+                    bind:value={points}
+                    min="1"
+                    max="1000"
                     class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                  >
-                    <option value="">No reading text</option>
-                    {#each readingTexts as readingText}
-                      <option value={readingText.id}>{readingText.title}</option>
-                    {/each}
-                  </select>
+                  />
                 </div>
               </div>
 

@@ -58,10 +58,17 @@
   function goBack() {
     goto('/dashboard');
   }
+
+  function handleKeydown(event: Event) {
+    const e = event as KeyboardEvent;
+    if (e.key === 'Enter') {
+      handleSubmit();
+    }
+  }
 </script>
 
 <svelte:head>
-  <title>Create Class - LMS IDEA</title>
+  <title>Create Class - LMS Light</title>
 </svelte:head>
 
 <div class="min-h-screen bg-gray-50">
@@ -70,14 +77,12 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16">
         <div class="flex items-center">
-          <div class="mr-4">
-            <Button variant="secondary" size="sm" on:click={goBack}>
+          <Button variant="secondary" size="sm" on:click={goBack} class="mr-4">
             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
             </svg>
             Back
           </Button>
-          </div>
           <h1 class="text-xl font-semibold text-gray-900">Create New Class</h1>
         </div>
       </div>
@@ -87,7 +92,7 @@
   <!-- Form -->
   <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <div class="bg-white rounded-lg shadow p-6">
-      <form on:submit|preventDefault={handleSubmit}>
+      <form on:submit|preventDefault={handleSubmit} on:keydown={handleKeydown}>
         <div class="space-y-6">
           <div>
             <h2 class="text-lg font-medium text-gray-900 mb-4">Class Information</h2>

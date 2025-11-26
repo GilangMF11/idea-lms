@@ -196,7 +196,7 @@
 </script>
 
 <svelte:head>
-  <title>Create Reading Text - LMS IDEA</title>
+  <title>Create Reading Text - LMS Light</title>
 </svelte:head>
 
 <div class="min-h-screen bg-gray-50">
