@@ -78,14 +78,14 @@
         users = data.users || [];
         totalUsers = data.total || 0;
       } else if (response.status === 403) {
-        error = 'Anda tidak memiliki akses untuk melihat daftar user';
+        error = 'You do not have permission to view the user list';
         goto('/dashboard');
       } else {
-        error = 'Gagal memuat daftar user';
+        error = 'Failed to load user list';
       }
     } catch (err) {
       console.error('Error loading users:', err);
-      error = 'Terjadi kesalahan saat memuat data';
+      error = 'An error occurred while loading data';
     } finally {
       loading = false;
     }
@@ -164,7 +164,7 @@
         error = data.error || 'Gagal memperbarui user';
       }
     } catch (err) {
-      error = 'Terjadi kesalahan saat memperbarui user';
+      error = 'An error occurred while updating user';
     } finally {
       isSaving = false;
     }
@@ -195,7 +195,7 @@
         error = data.error || 'Gagal menonaktifkan user';
       }
     } catch (err) {
-      error = 'Terjadi kesalahan saat menonaktifkan user';
+      error = 'An error occurred while disabling user';
     }
   }
 
@@ -222,14 +222,14 @@
         error = data.error || 'Gagal mengubah status user';
       }
     } catch (err) {
-      error = 'Terjadi kesalahan saat mengubah status user';
+      error = 'An error occurred while changing user status';
     }
   }
 
   function getRoleLabel(role: string) {
     const labels: Record<string, string> = {
-      'STUDENT': 'Mahasiswa',
-      'TEACHER': 'Dosen',
+      'STUDENT': 'Student',
+      'TEACHER': 'Teacher',
       'ADMIN': 'Admin',
     };
     return labels[role] || role;
@@ -246,7 +246,7 @@
   <!-- Header -->
   <header class="bg-white shadow-sm border-b border-gray-200">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex justify-between items-center py-4">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between py-4">
         <div class="flex items-center">
           <a href="/dashboard" class="flex items-center">
             <div class="h-8 w-8 bg-primary-600 rounded-lg flex items-center justify-center mr-3">
@@ -258,7 +258,7 @@
           </a>
         </div>
         
-        <div class="flex items-center space-x-4">
+        <div class="flex items-center justify-between sm:justify-end space-x-4">
           <a href="/dashboard" class="text-sm text-gray-700 hover:text-gray-900">
             Dashboard
           </a>

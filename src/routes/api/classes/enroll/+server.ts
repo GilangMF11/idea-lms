@@ -45,7 +45,7 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
     });
 
     if (existingEnrollment) {
-      return json({ error: 'Anda sudah terdaftar di kelas ini' }, { status: 400 });
+      return json({ error: 'You are already enrolled in this class' }, { status: 400 });
     }
 
     // Enroll student to class
@@ -74,7 +74,7 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
 
     return json({ 
       enrollment,
-      message: 'Berhasil mendaftar ke kelas'
+      message: 'Successfully enrolled in class'
     }, { status: 201 });
   } catch (error) {
     console.error('Enroll to class error:', error);

@@ -243,9 +243,9 @@
 
       <!-- Phone Number -->
       <FormField
-        label="No WhatsApp"
+        label="WhatsApp Number"
         type="tel"
-        placeholder="081234567890"
+        placeholder="e.g. 081234567890"
         bind:value={phoneNumber}
         required
         on:keydown={handleKeydown}
@@ -253,19 +253,19 @@
 
       <!-- Institution -->
       <FormField
-        label="Institusi"
+        label="Institution"
         type="text"
-        placeholder="Nama Institusi"
+        placeholder="Institution name"
         bind:value={institution}
         required
         on:keydown={handleKeydown}
       />
 
-      <!-- Program -->
+      <!-- Study Program -->
       <FormField
-        label="Program Studi"
+        label="Study Program"
         type="text"
-        placeholder="Nama Program Studi"
+        placeholder="Study program name"
         bind:value={program}
         required
         on:keydown={handleKeydown}
@@ -282,7 +282,7 @@
           class="input-field"
           required
         >
-          <option value="">Pilih Semester</option>
+          <option value="">Select Semester</option>
           <option value="1">Semester 1</option>
           <option value="2">Semester 2</option>
           <option value="3">Semester 3</option>
@@ -297,18 +297,18 @@
       <!-- Province and City -->
       <div class="grid grid-cols-2 gap-4">
         <FormField
-          label="Provinsi"
+          label="Province"
           type="text"
-          placeholder="Nama Provinsi"
+          placeholder="Province name"
           bind:value={province}
           required
           on:keydown={handleKeydown}
         />
 
         <FormField
-          label="Kota"
+          label="City"
           type="text"
-          placeholder="Nama Kota"
+          placeholder="City name"
           bind:value={city}
           required
           on:keydown={handleKeydown}

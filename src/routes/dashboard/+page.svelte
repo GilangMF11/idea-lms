@@ -39,19 +39,21 @@
               goto('/complete-profile', { replaceState: true });
               return;
             }
-            // Remove query parameter after sync
-            goto('/dashboard', { replaceState: true });
-            return; // Exit early to prevent redirect to login
+            // Profile complete: load dashboard data directly to avoid stuck loading
+            await loadDashboardData();
+            // Optionally clean up the URL (remove oauth_success) without re-running onMount
+            if (typeof window !== 'undefined') {
+              const url = new URL(window.location.href);
+              url.searchParams.delete('oauth_success');
+              window.history.replaceState({}, '', url.toString());
+            }
+            return; // Exit early to prevent redirect to login / duplicate loading
           }
         } else {
           console.error('Auth sync failed:', await response.text());
         }
-        // Remove query parameter even if sync failed
-        goto('/dashboard', { replaceState: true });
       } catch (err) {
         console.error('Auth sync error:', err);
-        // Remove query parameter on error
-        goto('/dashboard', { replaceState: true });
       }
     }
     
@@ -111,10 +113,15 @@
 
   async function loadDashboardData() {
     try {
-      loading = true;
       const token = $authStore.token;
       
-      if (!$authStore.user) return;
+      // If user is not yet loaded, avoid getting stuck in loading state
+      if (!$authStore.user) {
+        loading = false;
+        return;
+      }
+
+      loading = true;
       
       // Load classes
       const classesResponse = await fetch('/api/classes', {
@@ -231,7 +238,7 @@
     <!-- Header -->
     <header class="bg-white shadow-sm border-b border-gray-200">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between items-center py-4">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between py-4">
           <div class="flex items-center">
             <div class="h-8 w-8 bg-primary-600 rounded-lg flex items-center justify-center mr-3">
               <svg class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -241,7 +248,7 @@
             <h1 class="text-xl font-semibold text-gray-900">IDEA</h1>
           </div>
           
-          <div class="flex items-center space-x-4">
+          <div class="flex items-center justify-between sm:justify-end space-x-4">
             <!-- User Menu -->
             <div class="relative user-menu">
               <button

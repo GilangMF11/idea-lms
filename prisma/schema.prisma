@@ -153,14 +153,22 @@ model Annotation {
   @@map("annotations")
 }
 
+enum ChatMessageType {
+  TEXT
+  AUDIO
+}
+
 model ChatMessage {
-  id           String   @id @default(cuid())
-  classId      String
-  userId       String
-  content      String
-  annotationId String?  // Optional - untuk discussion annotation
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String          @id @default(cuid())
+  classId       String
+  userId        String
+  content       String?
+  type          ChatMessageType @default(TEXT)
+  audioUrl      String?
+  audioDuration Int?
+  annotationId  String?  // Optional - untuk discussion annotation
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   // Relations
   class      Class      @relation(fields: [classId], references: [id])

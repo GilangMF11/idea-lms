@@ -170,23 +170,23 @@
 
   function getRoleLabel(role: string) {
     const labels: Record<string, string> = {
-      'STUDENT': 'Mahasiswa',
-      'TEACHER': 'Dosen',
+      'STUDENT': 'Student',
+      'TEACHER': 'Teacher',
       'ADMIN': 'Admin',
     };
     return labels[role] || role;
   }
 </script>
 
-<svelte:head>
-  <title>Profil - IDEA</title>
+  <svelte:head>
+  <title>Profile - IDEA</title>
 </svelte:head>
 
 <div class="min-h-screen bg-gray-50">
   <!-- Header -->
   <header class="bg-white shadow-sm border-b border-gray-200">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex justify-between items-center py-4">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between py-4">
         <div class="flex items-center">
           <a href="/dashboard" class="flex items-center">
             <div class="h-8 w-8 bg-primary-600 rounded-lg flex items-center justify-center mr-3">
@@ -198,7 +198,7 @@
           </a>
         </div>
         
-        <div class="flex items-center space-x-4">
+        <div class="flex items-center justify-between sm:justify-end space-x-4">
           <a href="/dashboard" class="text-sm text-gray-700 hover:text-gray-900">
             Dashboard
           </a>
@@ -212,14 +212,14 @@
     {#if loadingProfile}
       <div class="flex items-center justify-center py-12">
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-        <span class="ml-2 text-gray-600">Memuat profil...</span>
+        <span class="ml-2 text-gray-600">Loading profile...</span>
       </div>
     {:else}
       <!-- Page Header -->
       <div class="mb-8">
-        <h2 class="text-3xl font-bold text-gray-900">Profil Saya</h2>
+        <h2 class="text-3xl font-bold text-gray-900">My Profile</h2>
         <p class="mt-2 text-sm text-gray-600">
-          Kelola informasi profil dan data pribadi Anda
+          Manage your profile information and personal data
         </p>
       </div>
 
@@ -424,7 +424,7 @@
             <!-- Read-only View -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label class="block text-sm font-medium text-gray-500 mb-1">Nama Lengkap</label>
+                <label class="block text-sm font-medium text-gray-500 mb-1">Full Name</label>
                 <p class="text-sm text-gray-900">{firstName} {lastName}</p>
               </div>
 
@@ -439,22 +439,22 @@
               </div>
 
               <div>
-                <label class="block text-sm font-medium text-gray-500 mb-1">Peran</label>
+                <label class="block text-sm font-medium text-gray-500 mb-1">Role</label>
                 <p class="text-sm text-gray-900">{getRoleLabel(role)}</p>
               </div>
 
               <div>
-                <label class="block text-sm font-medium text-gray-500 mb-1">No WhatsApp</label>
+                <label class="block text-sm font-medium text-gray-500 mb-1">WhatsApp Number</label>
                 <p class="text-sm text-gray-900">{phoneNumber || '-'}</p>
               </div>
 
               <div>
-                <label class="block text-sm font-medium text-gray-500 mb-1">Institusi</label>
+                <label class="block text-sm font-medium text-gray-500 mb-1">Institution</label>
                 <p class="text-sm text-gray-900">{institution || '-'}</p>
               </div>
 
               <div>
-                <label class="block text-sm font-medium text-gray-500 mb-1">Program Studi</label>
+                <label class="block text-sm font-medium text-gray-500 mb-1">Study Program</label>
                 <p class="text-sm text-gray-900">{program || '-'}</p>
               </div>
 
@@ -464,17 +464,17 @@
               </div>
 
               <div>
-                <label class="block text-sm font-medium text-gray-500 mb-1">Provinsi</label>
+                <label class="block text-sm font-medium text-gray-500 mb-1">Province</label>
                 <p class="text-sm text-gray-900">{province || '-'}</p>
               </div>
 
               <div>
-                <label class="block text-sm font-medium text-gray-500 mb-1">Kota</label>
+                <label class="block text-sm font-medium text-gray-500 mb-1">City</label>
                 <p class="text-sm text-gray-900">{city || '-'}</p>
               </div>
 
               <div>
-                <label class="block text-sm font-medium text-gray-500 mb-1">Bergabung Sejak</label>
+                <label class="block text-sm font-medium text-gray-500 mb-1">Joined Since</label>
                 <p class="text-sm text-gray-900">{createdAt || '-'}</p>
               </div>
             </div>

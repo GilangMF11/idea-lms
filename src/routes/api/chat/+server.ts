@@ -110,10 +110,18 @@ export const POST: RequestHandler = async ({ request }) => {
       return json({ error: 'Invalid token' }, { status: 401 });
     }
 
-    const { classId, content, annotationId } = await request.json();
+    const { classId, content, annotationId, type = 'TEXT', audioUrl, audioDuration } = await request.json();
 
-    if (!classId || !content) {
-      return json({ error: 'Class ID and content are required' }, { status: 400 });
+    if (!classId) {
+      return json({ error: 'Class ID is required' }, { status: 400 });
+    }
+
+    if (type === 'TEXT' && (!content || !content.trim())) {
+      return json({ error: 'Content is required for text messages' }, { status: 400 });
+    }
+
+    if (type === 'AUDIO' && !audioUrl) {
+      return json({ error: 'Audio URL is required for audio messages' }, { status: 400 });
     }
 
     // Check if user has access to this class
@@ -149,7 +157,10 @@ export const POST: RequestHandler = async ({ request }) => {
       data: {
         classId,
         userId: user.id,
-        content,
+        content: type === 'TEXT' ? content : null,
+        type: type as 'TEXT' | 'AUDIO',
+        audioUrl: type === 'AUDIO' ? audioUrl : null,
+        audioDuration: type === 'AUDIO' ? audioDuration ?? null : null,
         ...(annotationId && { annotationId }), // Include annotationId if provided
       },
       include: {

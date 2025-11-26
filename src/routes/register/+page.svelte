@@ -110,9 +110,9 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
         </svg>
       </div>
-      <h2 class="text-3xl font-bold text-gray-900">Buat Akun Anda</h2>
+      <h2 class="text-3xl font-bold text-gray-900">Create Your Account</h2>
       <p class="mt-2 text-sm text-gray-600">
-        Bergabung dengan sistem manajemen pembelajaran kami
+        Join our learning management system
       </p>
     </div>
 
@@ -168,9 +168,9 @@
 
       <!-- Phone Number -->
       <FormField
-        label="No WhatsApp"
+        label="WhatsApp Number"
         type="tel"
-        placeholder="081234567890"
+        placeholder="e.g. 081234567890"
         bind:value={phoneNumber}
         required
         on:keydown={handleKeydown}
@@ -178,19 +178,19 @@
 
       <!-- Institution -->
       <FormField
-        label="Institusi"
+        label="Institution"
         type="text"
-        placeholder="Nama Institusi"
+        placeholder="Institution name"
         bind:value={institution}
         required
         on:keydown={handleKeydown}
       />
 
-      <!-- Program -->
+      <!-- Study Program -->
       <FormField
-        label="Program Studi"
+        label="Study Program"
         type="text"
-        placeholder="Nama Program Studi"
+        placeholder="Study program name"
         bind:value={program}
         required
         on:keydown={handleKeydown}
@@ -207,7 +207,7 @@
           class="input-field"
           required
         >
-          <option value="">Pilih Semester</option>
+          <option value="">Select Semester</option>
           <option value="1">Semester 1</option>
           <option value="2">Semester 2</option>
           <option value="3">Semester 3</option>
@@ -222,18 +222,18 @@
       <!-- Province and City -->
       <div class="grid grid-cols-2 gap-4">
         <FormField
-          label="Provinsi"
+          label="Province"
           type="text"
-          placeholder="Nama Provinsi"
+          placeholder="Province name"
           bind:value={province}
           required
           on:keydown={handleKeydown}
         />
 
         <FormField
-          label="Kota"
+          label="City"
           type="text"
-          placeholder="Nama Kota"
+          placeholder="City name"
           bind:value={city}
           required
           on:keydown={handleKeydown}
@@ -272,7 +272,7 @@
             {/if}
           </button>
         </div>
-        <p class="text-xs text-gray-500">Minimal 6 karakter</p>
+        <p class="text-xs text-gray-500">At least 6 characters</p>
       </div>
 
       <!-- Confirm Password -->
@@ -338,7 +338,7 @@
         loading={isLoading}
         disabled={isLoading}
       >
-        {isLoading ? 'Membuat akun...' : 'Buat Akun'}
+        {isLoading ? 'Creating account...' : 'Create Account'}
       </Button>
     </form>
 
@@ -349,7 +349,7 @@
           <div class="w-full border-t border-gray-300"></div>
         </div>
         <div class="relative flex justify-center text-sm">
-          <span class="px-2 bg-white text-gray-500">Atau lanjutkan dengan</span>
+          <span class="px-2 bg-white text-gray-500">Or continue with</span>
         </div>
       </div>
     </div>
@@ -369,16 +369,16 @@
           <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
           <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
         </svg>
-        Daftar dengan Google
+        Sign up with Google
       </Button>
     </div>
 
     <!-- Sign In Link -->
     <div class="mt-8 text-center">
       <p class="text-sm text-gray-600">
-        Sudah punya akun?
+        Already have an account?
         <a href="/login" class="font-medium text-primary-600 hover:text-primary-500 ml-1">
-          Masuk
+          Sign In
         </a>
       </p>
     </div>

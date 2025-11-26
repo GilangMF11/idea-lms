@@ -553,7 +553,11 @@
         <h3 class="mt-2 text-sm font-medium text-gray-900">No reading materials yet</h3>
         <p class="mt-1 text-sm text-gray-500">Add reading materials for this class to get started.</p>
         <div class="mt-6">
-          <Button variant="primary" size="sm">
+          <Button 
+            variant="primary" 
+            size="sm" 
+            on:click={() => goto(`/reading-texts/create?classId=${classData.id}`)}
+          >
             Add Material
           </Button>
         </div>

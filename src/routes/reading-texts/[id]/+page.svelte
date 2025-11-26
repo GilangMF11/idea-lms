@@ -29,6 +29,22 @@
   let chatError = '';
   let chatSocket: WebSocket | null = null;
   let chatRefreshInterval: number | null = null;
+  let audioUploading = false;
+  let audioError = '';
+  let audioInput: HTMLInputElement;
+
+  // Highlight colors for annotated text (rotating palette)
+  const annotationHighlightColors = [
+    '#fef3c7', // soft yellow
+    '#e0f2fe', // soft blue
+    '#ecfeff', // soft cyan
+    '#fce7f3', // soft pink
+    '#dcfce7', // soft green
+  ];
+
+  function getAnnotationHighlightColor(index: number) {
+    return annotationHighlightColors[index % annotationHighlightColors.length];
+  }
 
   onMount(() => {
     authStore.init();
@@ -333,6 +349,7 @@
         body: JSON.stringify({
           classId: readingText?.classId,
           content: newMessage.trim(),
+          type: 'TEXT',
           annotationId: selectedAnnotationForChat.id
         })
       });
@@ -350,6 +367,71 @@
       chatError = 'Failed to send message';
     } finally {
       chatLoading = false;
+    }
+  }
+
+  async function handleAudioSelect(event: Event) {
+    const target = event.target as HTMLInputElement;
+    const files = target.files;
+    if (!files || files.length === 0 || !selectedAnnotationForChat) return;
+
+    const file = files[0];
+    audioError = '';
+    audioUploading = true;
+
+    try {
+      const formData = new FormData();
+      formData.append('audio', file);
+
+      const uploadResponse = await fetch('/api/upload/audio', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+        },
+        body: formData
+      });
+
+      if (!uploadResponse.ok) {
+        const errData = await uploadResponse.json().catch(() => ({}));
+        audioError = errData.error || 'Failed to upload audio';
+        return;
+      }
+
+      const uploadData = await uploadResponse.json();
+      const audioUrl = uploadData.url;
+
+      // Send audio chat message
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          classId: readingText?.classId,
+          type: 'AUDIO',
+          audioUrl,
+          annotationId: selectedAnnotationForChat.id
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        chatMessages = [...chatMessages, data.message];
+        // refresh from server without loading spinner
+        await loadChatMessages(selectedAnnotationForChat.id, { showLoading: false });
+      } else {
+        const err = await response.json().catch(() => ({}));
+        audioError = err.error || 'Failed to send audio message';
+      }
+    } catch (err) {
+      console.error('Audio upload/send error:', err);
+      audioError = 'Failed to send audio message';
+    } finally {
+      audioUploading = false;
+      if (audioInput) {
+        audioInput.value = '';
+      }
     }
   }
 
@@ -555,11 +637,46 @@
     if (!selection || selection.rangeCount === 0) return null;
     
     const range = selection.getRangeAt(0);
+    const contentDiv = document.querySelector('.reading-content');
+    if (!contentDiv || !contentDiv.contains(range.commonAncestorContainer)) {
+      return null;
+    }
+
+    // Walk all text nodes in reading-content to compute global offsets
+    let globalStart = -1;
+    let globalEnd = -1;
+    let currentOffset = 0;
+
+    const walker = document.createTreeWalker(
+      contentDiv,
+      NodeFilter.SHOW_TEXT
+    );
+
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      const textLength = node.textContent?.length || 0;
+
+      if (node === range.startContainer) {
+        globalStart = currentOffset + range.startOffset;
+      }
+
+      if (node === range.endContainer) {
+        globalEnd = currentOffset + range.endOffset;
+        break;
+      }
+
+      currentOffset += textLength;
+    }
+
+    if (globalStart === -1 || globalEnd === -1) {
+      return null;
+    }
+
     const rect = range.getBoundingClientRect();
     
     return {
-      startOffset: range.startOffset,
-      endOffset: range.endOffset,
+      startOffset: globalStart,
+      endOffset: globalEnd,
       top: rect.top,
       left: rect.left
     };
@@ -568,88 +685,66 @@
   function highlightAnnotatedText() {
     if (!readingText || !annotations.length) return;
 
-    // Clear existing highlights
     const contentDiv = document.querySelector('.reading-content');
     if (!contentDiv) return;
 
-    // Remove existing annotation markers (but not temporary highlight spans)
+    // 1) Remove all previous highlights, but keep the text
     const existingMarkers = contentDiv.querySelectorAll('.annotation-marker');
-    existingMarkers.forEach(marker => marker.remove());
+    existingMarkers.forEach((marker) => {
+      const parent = marker.parentNode;
+      if (!parent) return;
+      while (marker.firstChild) {
+        parent.insertBefore(marker.firstChild, marker);
+      }
+      parent.removeChild(marker);
+    });
 
-    // Get all text content from the div
-    const fullText = contentDiv.textContent || '';
-    console.log('Full text content:', fullText.substring(0, 100) + '...');
+    // 2) Re-apply highlights for ALL annotations based on selectedText
+    annotations.forEach((annotation, index) => {
+      const selected = (annotation.selectedText || '').trim();
+      if (!selected) return;
 
-    // Add highlights for each annotation
-    annotations.forEach(annotation => {
-      if (annotation.selectedText && annotation.startPos !== undefined && annotation.endPos !== undefined) {
-        console.log('Processing annotation:', {
-          selectedText: annotation.selectedText,
-          startPos: annotation.startPos,
-          endPos: annotation.endPos
-        });
+      const searchLower = selected.toLowerCase();
 
-        // Find the text node that contains the annotation
-        let targetTextNode = null;
-        let currentOffset = 0;
-        
-        const walker = document.createTreeWalker(
-          contentDiv,
-          NodeFilter.SHOW_TEXT
-        );
-        
-        let node;
-        while (node = walker.nextNode()) {
-          const nodeLength = node.textContent?.length || 0;
-          if (annotation.startPos >= currentOffset && annotation.startPos < currentOffset + nodeLength) {
-            targetTextNode = node;
-            break;
-          }
-          currentOffset += nodeLength;
-        }
+      const walker = document.createTreeWalker(
+        contentDiv,
+        NodeFilter.SHOW_TEXT
+      );
 
-        if (targetTextNode) {
-          console.log('Found target text node:', targetTextNode.textContent?.substring(0, 50) + '...');
-          
-          const range = document.createRange();
+      let node: Node | null;
+      let found = false;
+
+      while ((node = walker.nextNode()) && !found) {
+        const textNode = node as Text;
+        const text = textNode.textContent || '';
+        const lower = text.toLowerCase();
+
+        const idx = lower.indexOf(searchLower);
+        if (idx !== -1) {
           try {
-            // Calculate relative positions within the target text node
-            const nodeStartOffset = currentOffset;
-            const relativeStartPos = Math.max(0, annotation.startPos - nodeStartOffset);
-            const relativeEndPos = Math.min(
-              targetTextNode.textContent?.length || 0, 
-              annotation.endPos - nodeStartOffset
-            );
-            
-            console.log('Relative positions:', {
-              nodeStartOffset,
-              relativeStartPos,
-              relativeEndPos,
-              nodeLength: targetTextNode.textContent?.length
-            });
-            
-            range.setStart(targetTextNode, relativeStartPos);
-            range.setEnd(targetTextNode, relativeEndPos);
-            
+            const range = document.createRange();
+            range.setStart(textNode, idx);
+            range.setEnd(textNode, idx + selected.length);
+
             const span = document.createElement('span');
             span.className = 'annotation-marker';
             span.style.cssText = `
               cursor: pointer;
               position: relative;
-              transition: all 0.2s ease;
+              transition: all 0.15s ease;
+              background-color: ${getAnnotationHighlightColor(index)};
+              padding: 0 2px;
+              border-radius: 3px;
+              box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.03);
             `;
-            span.title = `Annotation: ${annotation.content}`;
+            span.title = 'Annotation: ' + (annotation.content ?? '');
             span.onclick = () => openChatModal(annotation);
-            
-            // No hover effect needed since there's no visual element
-            
+
             range.surroundContents(span);
-            console.log('Successfully highlighted annotation');
+            found = true;
           } catch (e) {
-            console.warn('Could not highlight annotation:', e);
+            console.warn('Could not highlight annotation by text match:', e);
           }
-        } else {
-          console.warn('Could not find target text node for annotation');
         }
       }
     });
@@ -743,6 +838,13 @@
                 role="textbox"
                 tabindex="0"
                 on:click={handleTextSelection}
+                on:mouseup={handleTextSelection}
+                on:touchend={(e) => {
+                  // Beri waktu sedikit agar selection dari sentuhan selesai
+                  setTimeout(() => {
+                    handleTextSelection();
+                  }, 0);
+                }}
                 on:keydown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
@@ -768,8 +870,11 @@
 
             {#if annotations.length > 0}
               <div class="space-y-4 max-h-96 overflow-y-auto">
-                {#each annotations as annotation}
-                  <div class="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                {#each annotations as annotation, i}
+                  <div 
+                    class="border border-gray-200 rounded-lg p-4 bg-gray-50"
+                    style={`border-left: 4px solid ${getAnnotationHighlightColor(i)};`}
+                  >
                     <div class="flex items-start justify-between mb-2">
                       <div class="flex items-center">
                         <div class="h-8 w-8 bg-primary-100 rounded-full flex items-center justify-center mr-3">
@@ -948,7 +1053,17 @@
                     <span class="text-xs text-gray-400 ml-2">{new Date(message.createdAt).toLocaleTimeString()}</span>
                   </div>
                   <div class="px-4 py-2 rounded-lg {message.userId === $authStore.user?.id ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-900'}">
-                    <p class="text-sm">{message.content}</p>
+                    {#if message.type === 'AUDIO' && message.audioUrl}
+                      <audio
+                        controls
+                        src={message.audioUrl}
+                        class="w-full"
+                      >
+                        Your browser does not support the audio element.
+                      </audio>
+                    {:else}
+                      <p class="text-sm break-words">{message.content}</p>
+                    {/if}
                   </div>
                 </div>
               </div>
@@ -957,16 +1072,31 @@
         </div>
 
         <!-- Message Input -->
-        <div class="p-4 border-t border-gray-200">
+        <div class="p-4 border-t border-gray-200 space-y-2">
+          {#if audioError}
+            <div class="text-xs text-red-600 mb-1">{audioError}</div>
+          {/if}
           <div class="flex space-x-2">
             <input
               type="text"
               bind:value={newMessage}
-              placeholder="Type your message..."
+              placeholder="Type your message... (emoji supported 🙂)"
               class="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500"
               on:keydown={(e) => e.key === 'Enter' && sendMessage()}
               disabled={chatLoading}
             />
+            <button
+              type="button"
+              class="px-3 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 border border-gray-300 text-sm disabled:opacity-50"
+              on:click={() => audioInput && audioInput.click()}
+              disabled={audioUploading || chatLoading}
+            >
+              {#if audioUploading}
+                Uploading...
+              {:else}
+                Voice
+              {/if}
+            </button>
             <button
               class="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50"
               on:click={sendMessage}
@@ -984,6 +1114,13 @@
               {/if}
             </button>
           </div>
+          <input
+            bind:this={audioInput}
+            type="file"
+            accept="audio/*"
+            class="hidden"
+            on:change={handleAudioSelect}
+          />
         </div>
       </div>
     </div>
