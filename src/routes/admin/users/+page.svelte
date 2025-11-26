@@ -41,12 +41,12 @@
       goto('/login');
       return;
     }
-
+    
     if ($authStore.user?.role !== 'ADMIN') {
       goto('/dashboard');
       return;
     }
-
+    
     await loadUsers();
   });
 
@@ -575,22 +575,22 @@
           </svg>
         </button>
       </div>
-
+      
       <div class="px-6 py-5 space-y-6">
         <!-- Name Fields -->
         <div class="grid grid-cols-2 gap-4">
-          <FormField
-            label="Nama Depan"
-            type="text"
-            bind:value={editFirstName}
-            required
-          />
-          <FormField
-            label="Nama Belakang"
-            type="text"
-            bind:value={editLastName}
-            required
-          />
+        <FormField
+          label="Nama Depan"
+          type="text"
+          bind:value={editFirstName}
+          required
+        />
+        <FormField
+          label="Nama Belakang"
+          type="text"
+          bind:value={editLastName}
+          required
+        />
         </div>
 
         <!-- Email (Read-only) -->
@@ -615,7 +615,7 @@
             <option value="ADMIN">Admin</option>
           </select>
         </div>
-
+        
         <!-- Status -->
         <div class="flex items-center">
           <input
@@ -680,7 +680,7 @@
           </div>
         </div>
       </div>
-
+      
       <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
         <Button variant="secondary" size="md" on:click={closeEditModal} disabled={isSaving}>
           Batal

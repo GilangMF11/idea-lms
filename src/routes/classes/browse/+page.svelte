@@ -10,6 +10,23 @@
   let error = '';
   let success = '';
   let enrollingClassId: string | null = null;
+  let searchTerm = '';
+
+  // Filtered classes berdasarkan pencarian (kelas & dosen dalam satu field)
+  $: filteredClasses = classes.filter((classItem) => {
+    const className = (classItem.name || '').toLowerCase();
+    const classDesc = (classItem.description || '').toLowerCase();
+    const teacherName = `${classItem.teacher?.firstName || ''} ${classItem.teacher?.lastName || ''}`.toLowerCase();
+    const term = searchTerm.toLowerCase().trim();
+
+    if (!term) return true;
+
+    return (
+      className.includes(term) ||
+      classDesc.includes(term) ||
+      teacherName.includes(term)
+    );
+  });
 
   onMount(async () => {
     authStore.init();
@@ -131,6 +148,22 @@
       </p>
     </div>
 
+    <!-- Filter / Search (satu field) -->
+    <div class="mb-6 bg-white shadow rounded-lg p-4 border border-gray-100">
+      <div>
+        <label for="searchTerm" class="block text-sm font-medium text-gray-700 mb-1">
+          Cari kelas atau dosen
+        </label>
+        <input
+          id="searchTerm"
+          type="text"
+          placeholder="Nama kelas, deskripsi, atau nama dosen..."
+          bind:value={searchTerm}
+          class="input-field"
+        />
+      </div>
+    </div>
+
     <!-- Success Alert -->
     {#if success}
       <div class="mb-6">
@@ -159,9 +192,19 @@
         <h3 class="mt-2 text-sm font-medium text-gray-900">Tidak ada kelas tersedia</h3>
         <p class="mt-1 text-sm text-gray-500">Belum ada kelas yang dibuat.</p>
       </div>
+    {:else if filteredClasses.length === 0}
+      <div class="text-center py-12">
+        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+        </svg>
+        <h3 class="mt-2 text-sm font-medium text-gray-900">Kelas tidak ditemukan</h3>
+        <p class="mt-1 text-sm text-gray-500">
+          Coba ubah kata kunci pencarian kelas atau dosen.
+        </p>
+      </div>
     {:else}
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {#each classes as classItem}
+        {#each filteredClasses as classItem}
           <div class="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden hover:shadow-xl transition-shadow">
             <div class="p-6">
               <div class="flex items-start justify-between mb-4">

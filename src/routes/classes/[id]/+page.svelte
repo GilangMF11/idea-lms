@@ -51,16 +51,16 @@
 
       // Load students (only for teachers and admins)
       if ($authStore.user?.role === 'TEACHER' || $authStore.user?.role === 'ADMIN') {
-        const studentsResponse = await fetch(`/api/class-students?classId=${classId}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
+      const studentsResponse = await fetch(`/api/class-students?classId=${classId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
 
-        if (studentsResponse.ok) {
-          const studentsResult = await studentsResponse.json();
-          students = studentsResult.students || [];
+      if (studentsResponse.ok) {
+        const studentsResult = await studentsResponse.json();
+        students = studentsResult.students || [];
         }
       }
 
@@ -238,12 +238,12 @@
               Overview
             </button>
             {#if $authStore.user?.role === 'TEACHER' || $authStore.user?.role === 'ADMIN'}
-              <button
-                class="py-2 px-1 border-b-2 font-medium text-sm {activeTab === 'students' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
-                on:click={() => activeTab = 'students'}
-              >
-                Students ({students.length})
-              </button>
+            <button
+              class="py-2 px-1 border-b-2 font-medium text-sm {activeTab === 'students' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
+              on:click={() => activeTab = 'students'}
+            >
+              Students ({students.length})
+            </button>
             {/if}
             <button
               class="py-2 px-1 border-b-2 font-medium text-sm {activeTab === 'assignments' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"

@@ -28,6 +28,7 @@
   let chatLoading = false;
   let chatError = '';
   let chatSocket: WebSocket | null = null;
+  let chatRefreshInterval: number | null = null;
 
   onMount(() => {
     authStore.init();
@@ -197,9 +198,12 @@
     annotationToDelete = null;
   }
 
-  async function loadChatMessages(annotationId: string) {
+  async function loadChatMessages(annotationId: string, options: { showLoading?: boolean } = {}) {
+    const { showLoading = true } = options;
     try {
+      if (showLoading) {
       chatLoading = true;
+      }
       chatError = '';
       
       console.log('Loading chat messages for annotation:', annotationId);
@@ -228,7 +232,9 @@
       console.error('Error loading chat messages:', err);
       chatError = 'Failed to load chat messages';
     } finally {
+      if (showLoading) {
       chatLoading = false;
+      }
     }
   }
 
@@ -237,8 +243,13 @@
       chatSocket.close();
     }
     
-    // Setup WebSocket connection for real-time updates
-    const wsUrl = `ws://localhost:5174/api/ws?token=${$authStore.token}`;
+    // Setup WebSocket connection for real-time updates (optional)
+    try {
+      if (typeof window === 'undefined') return;
+      
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/api/ws?token=${$authStore.token}`;
+      
     chatSocket = new WebSocket(wsUrl);
     
     chatSocket.onopen = () => {
@@ -262,14 +273,30 @@
     
     chatSocket.onerror = (error) => {
       console.error('WebSocket error:', error);
+        // Jangan tutup modal, cukup tampilkan pesan error opsional
+        // chatError = 'Real-time chat tidak tersedia saat ini';
     };
+    } catch (err) {
+      console.error('Failed to initialize WebSocket:', err);
+      // Real-time chat tidak wajib; UI chat tetap jalan via HTTP
+    }
   }
 
   function openChatModal(annotation: any) {
     selectedAnnotationForChat = annotation;
     showChatModal = true;
     loadChatMessages(annotation.id);
-    setupWebSocket();
+
+    // Mulai polling berkala untuk auto-update chat (tanpa WebSocket)
+    if (chatRefreshInterval) {
+      clearInterval(chatRefreshInterval);
+    }
+    chatRefreshInterval = window.setInterval(() => {
+      if (selectedAnnotationForChat) {
+        // Refresh tanpa spinner agar tidak mengganggu UX
+        loadChatMessages(selectedAnnotationForChat.id, { showLoading: false });
+      }
+    }, 3000);
   }
 
   function closeChatModal() {
@@ -278,6 +305,11 @@
     newMessage = '';
     chatMessages = [];
     chatError = '';
+
+    if (chatRefreshInterval) {
+      clearInterval(chatRefreshInterval);
+      chatRefreshInterval = null;
+    }
     
     if (chatSocket) {
       chatSocket.close();
@@ -307,16 +339,9 @@
       
       if (response.ok) {
         const data = await response.json();
+        // Tambah pesan ke daftar saat ini (optimistic update)
         chatMessages = [...chatMessages, data.message];
         newMessage = '';
-        
-        // Send via WebSocket for real-time updates
-        if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
-          chatSocket.send(JSON.stringify({
-            type: 'chat_message',
-            message: data.message
-          }));
-        }
       } else {
         chatError = 'Failed to send message';
       }
@@ -870,6 +895,7 @@
       <div 
         class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col"
         role="document"
+        on:click|stopPropagation
       >
         <!-- Header -->
         <div class="flex items-center justify-between p-6 border-b border-gray-200">
