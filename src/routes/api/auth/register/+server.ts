@@ -5,11 +5,24 @@ import { prisma } from '$lib/database.js';
 
 export const POST: RequestHandler = async ({ request }: { request: any }) => {
   try {
-    const { email, username, password, firstName, lastName, role } = await request.json();
+    const { 
+      email, 
+      username, 
+      password, 
+      firstName, 
+      lastName, 
+      role,
+      phoneNumber,
+      institution,
+      program,
+      semester,
+      province,
+      city
+    } = await request.json();
 
     if (!email || !username || !password || !firstName || !lastName) {
       return json(
-        { error: 'All fields are required' },
+        { error: 'Semua field wajib diisi' },
         { status: 400 }
       );
     }
@@ -26,7 +39,7 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
 
     if (existingUser) {
       return json(
-        { error: 'User with this email or username already exists' },
+        { error: 'Pengguna dengan email atau username ini sudah ada' },
         { status: 409 }
       );
     }
@@ -37,7 +50,13 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
       password,
       firstName,
       lastName,
-      role: role || 'STUDENT',
+      role: 'STUDENT', // Always set to STUDENT for new registrations
+      phoneNumber,
+      institution,
+      program,
+      semester: semester ? parseInt(semester.toString()) : undefined,
+      province,
+      city,
     });
 
     const token = generateToken(user);

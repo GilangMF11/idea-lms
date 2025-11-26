@@ -111,6 +111,12 @@ function createAuthStore() {
       firstName: string;
       lastName: string;
       role?: 'STUDENT' | 'TEACHER' | 'ADMIN';
+      phoneNumber?: string;
+      institution?: string;
+      program?: string;
+      semester?: number;
+      province?: string;
+      city?: string;
     }) => {
       update(state => ({ ...state, isLoading: true }));
       

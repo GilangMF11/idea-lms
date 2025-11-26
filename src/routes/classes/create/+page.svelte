@@ -68,7 +68,7 @@
 </script>
 
 <svelte:head>
-  <title>Create Class - LMS Light</title>
+  <title>Create Class - IDEA</title>
 </svelte:head>
 
 <div class="min-h-screen bg-gray-50">

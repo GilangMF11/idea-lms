@@ -498,7 +498,7 @@
 </script>
 
 <svelte:head>
-  <title>Manage Class - {classData?.name || 'Loading...'} - LMS Light</title>
+  <title>Manage Class - {classData?.name || 'Loading...'} - IDEA</title>
 </svelte:head>
 
 {#if loading}

@@ -5,6 +5,11 @@ export const config = {
   auth: {
     jwtSecret: process.env.JWT_SECRET || 'your-super-secret-jwt-key-here',
     tokenExpiry: '7d',
+    google: {
+      clientId: process.env.GOOGLE_CLIENT_ID || '',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+      redirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5173/api/auth/google/callback',
+    },
   },
   ai: {
     openaiApiKey: process.env.OPENAI_API_KEY || '',

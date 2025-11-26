@@ -20,6 +20,8 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
     const userId = url.searchParams.get('id');
     const classId = url.searchParams.get('classId');
     const role = url.searchParams.get('role');
+    const search = url.searchParams.get('search');
+    const isActiveParam = url.searchParams.get('isActive');
     const limit = parseInt(url.searchParams.get('limit') || '50');
     const offset = parseInt(url.searchParams.get('offset') || '0');
 
@@ -35,6 +37,12 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
           email: true,
           role: true,
           avatar: true,
+          phoneNumber: true,
+          institution: true,
+          program: true,
+          semester: true,
+          province: true,
+          city: true,
           isActive: true,
           createdAt: true,
           updatedAt: true,
@@ -70,20 +78,42 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
       return json({ user: targetUser });
     }
 
-    // Get users list
-    if (user.role !== 'ADMIN' && user.role !== 'TEACHER') {
-      return json({ error: 'Only administrators and teachers can view users' }, { status: 403 });
+    // Get users list - Only ADMIN can view all users
+    if (user.role !== 'ADMIN') {
+      return json({ error: 'Only administrators can view all users' }, { status: 403 });
     }
 
     const whereClause: any = {};
     if (role) {
       whereClause.role = role;
     }
+    if (isActiveParam !== null && isActiveParam !== '') {
+      whereClause.isActive = isActiveParam === 'true';
+    }
     if (classId) {
       whereClause.OR = [
         { classesAsStudent: { some: { classId } } },
         { classesAsTeacher: { some: { id: classId } } },
       ];
+    }
+    if (search) {
+      const searchConditions = [
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { username: { contains: search, mode: 'insensitive' } },
+      ];
+      
+      if (whereClause.OR) {
+        // If classId filter exists, combine with AND
+        whereClause.AND = [
+          { OR: whereClause.OR },
+          { OR: searchConditions }
+        ];
+        delete whereClause.OR;
+      } else {
+        whereClause.OR = searchConditions;
+      }
     }
 
     const users = await prisma.user.findMany({
@@ -96,6 +126,12 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
         email: true,
         role: true,
         avatar: true,
+        phoneNumber: true,
+        institution: true,
+        program: true,
+        semester: true,
+        province: true,
+        city: true,
         isActive: true,
         createdAt: true,
         updatedAt: true,
@@ -203,7 +239,19 @@ export const PATCH: RequestHandler = async ({ request, url }) => {
       return json({ error: 'User ID is required' }, { status: 400 });
     }
 
-    const { firstName, lastName, avatar, isActive, role } = await request.json();
+    const { 
+      firstName, 
+      lastName, 
+      avatar, 
+      isActive, 
+      role,
+      phoneNumber,
+      institution,
+      program,
+      semester,
+      province,
+      city
+    } = await request.json();
 
     // Check if user has access to update this user
     if (user.id !== userId && user.role !== 'ADMIN') {
@@ -236,6 +284,12 @@ export const PATCH: RequestHandler = async ({ request, url }) => {
         ...(avatar !== undefined && { avatar }),
         ...(isActive !== undefined && { isActive }),
         ...(role && { role }),
+        ...(phoneNumber !== undefined && { phoneNumber }),
+        ...(institution !== undefined && { institution }),
+        ...(program !== undefined && { program }),
+        ...(semester !== undefined && { semester: semester ? parseInt(semester.toString()) : null }),
+        ...(province !== undefined && { province }),
+        ...(city !== undefined && { city }),
       },
       select: {
         id: true,
@@ -245,6 +299,12 @@ export const PATCH: RequestHandler = async ({ request, url }) => {
         email: true,
         role: true,
         avatar: true,
+        phoneNumber: true,
+        institution: true,
+        program: true,
+        semester: true,
+        province: true,
+        city: true,
         isActive: true,
         createdAt: true,
         updatedAt: true,

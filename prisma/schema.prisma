@@ -34,17 +34,24 @@ enum RevisionStatus {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  username  String   @unique
-  password  String
-  firstName String
-  lastName  String
-  role      UserRole @default(STUDENT)
-  avatar    String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  email       String   @unique
+  username    String   @unique
+  password    String?  // Optional untuk support Google OAuth
+  firstName   String
+  lastName    String
+  role        UserRole @default(STUDENT)
+  avatar      String?
+  phoneNumber String?  // No WA
+  institution String?  // Institusi
+  program     String?  // Prodi
+  semester    Int?     // Semester
+  province    String?  // Provinsi
+  city        String?  // Kota
+  googleId    String?  @unique // Google OAuth ID
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   // Relations
   classesAsStudent    ClassStudent[]

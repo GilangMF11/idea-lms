@@ -16,9 +16,9 @@
   onMount(() => {
     authStore.init();
     
-    // Redirect if not authenticated or not teacher/admin
-    if (!$authStore.isAuthenticated || !['TEACHER', 'ADMIN'].includes($authStore.user?.role || '')) {
-      goto('/dashboard');
+    // Redirect if not authenticated
+    if (!$authStore.isAuthenticated) {
+      goto('/login');
       return;
     }
     
@@ -49,17 +49,19 @@
         classData = classResult.classes?.[0] || classResult.class;
       }
 
-      // Load students
-      const studentsResponse = await fetch(`/api/class-students?classId=${classId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      // Load students (only for teachers and admins)
+      if ($authStore.user?.role === 'TEACHER' || $authStore.user?.role === 'ADMIN') {
+        const studentsResponse = await fetch(`/api/class-students?classId=${classId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
 
-      if (studentsResponse.ok) {
-        const studentsResult = await studentsResponse.json();
-        students = studentsResult.students || [];
+        if (studentsResponse.ok) {
+          const studentsResult = await studentsResponse.json();
+          students = studentsResult.students || [];
+        }
       }
 
       // Load exercises
@@ -102,7 +104,7 @@
 </script>
 
 <svelte:head>
-  <title>{classData?.name || 'Class Details'} - LMS Light</title>
+  <title>{classData?.name || 'Class Details'} - IDEA</title>
 </svelte:head>
 
 {#if loading}
@@ -204,7 +206,7 @@
               </svg>
             </div>
             <div class="ml-4">
-              <p class="text-sm font-medium text-gray-600">Assignments</p>
+              <p class="text-sm font-medium text-gray-600">Exit Tickets</p>
               <p class="text-2xl font-semibold text-gray-900">{exercises.length}</p>
             </div>
           </div>
@@ -235,17 +237,19 @@
             >
               Overview
             </button>
-            <button
-              class="py-2 px-1 border-b-2 font-medium text-sm {activeTab === 'students' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
-              on:click={() => activeTab = 'students'}
-            >
-              Students ({students.length})
-            </button>
+            {#if $authStore.user?.role === 'TEACHER' || $authStore.user?.role === 'ADMIN'}
+              <button
+                class="py-2 px-1 border-b-2 font-medium text-sm {activeTab === 'students' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
+                on:click={() => activeTab = 'students'}
+              >
+                Students ({students.length})
+              </button>
+            {/if}
             <button
               class="py-2 px-1 border-b-2 font-medium text-sm {activeTab === 'assignments' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
               on:click={() => activeTab = 'assignments'}
             >
-              Assignments ({exercises.length})
+              Exit Tickets ({exercises.length})
             </button>
             <button
               class="py-2 px-1 border-b-2 font-medium text-sm {activeTab === 'materials' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
@@ -445,13 +449,13 @@
   </div>
 {/snippet}
 
-<!-- Assignments Tab -->
+<!-- Exit Tickets Tab -->
 {#snippet assignmentsTab()}
   <div class="card p-6">
     <div class="flex justify-between items-center mb-6">
-      <h3 class="text-lg font-semibold text-gray-900">Assignments ({exercises.length})</h3>
+      <h3 class="text-lg font-semibold text-gray-900">Exit Tickets ({exercises.length})</h3>
       <div class="text-sm text-gray-500">
-        Total assignments
+        Total exit tickets
       </div>
     </div>
 
@@ -489,11 +493,11 @@
         <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
-        <h3 class="mt-2 text-sm font-medium text-gray-900">No assignments yet</h3>
-        <p class="mt-1 text-sm text-gray-500">Create assignments for this class to get started.</p>
+        <h3 class="mt-2 text-sm font-medium text-gray-900">No exit tickets yet</h3>
+        <p class="mt-1 text-sm text-gray-500">Create exit tickets for this class to get started.</p>
         <div class="mt-6">
           <Button variant="primary" size="sm">
-            Create Assignment
+            Create Exit Ticket
           </Button>
         </div>
       </div>

@@ -1,7 +1,7 @@
-# Database Setup - LMS Light
+# Database Setup - IDEA
 
 ## Overview
-Database schema lengkap untuk Learning Management System (LMS) Light yang mendukung fitur collaborative learning, writing, dan peer review.
+Database schema lengkap untuk Learning Management System (IDEA) yang mendukung fitur collaborative learning, writing, dan peer review.
 
 ## Quick Start
 

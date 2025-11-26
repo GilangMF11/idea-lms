@@ -103,7 +103,7 @@
 </script>
 
 <svelte:head>
-  <title>Create Exercise - LMS Light</title>
+  <title>Create Exercise - IDEA</title>
 </svelte:head>
 
 <div class="min-h-screen bg-gray-50">

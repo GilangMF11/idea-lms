@@ -26,7 +26,7 @@
       return;
     }
 
-    // Load assignments directly
+    // Load exit tickets directly
     try {
       const response = await fetch('/api/exercises', {
         headers: {
@@ -60,7 +60,7 @@
         }
       }
     } catch (err) {
-      console.error('Error loading assignments:', err);
+      console.error('Error loading exit tickets:', err);
     } finally {
       loading = false;
     }
@@ -72,7 +72,7 @@
 </script>
 
 <svelte:head>
-  <title>My Assignments - LMS</title>
+  <title>My Exit Tickets - IDEA</title>
 </svelte:head>
 
 <div class="min-h-screen bg-gray-50">
@@ -86,8 +86,8 @@
           </svg>
         </div>
         <div>
-          <h1 class="text-3xl font-bold text-gray-900">My Assignments</h1>
-          <p class="text-gray-600 mt-1">View and manage your exercise assignments</p>
+          <h1 class="text-3xl font-bold text-gray-900">My Exit Tickets</h1>
+          <p class="text-gray-600 mt-1">View and manage your exit tickets</p>
         </div>
       </div>
       
@@ -101,7 +101,7 @@
               </svg>
             </div>
             <div>
-              <p class="text-sm font-medium text-gray-900">Total Assignments</p>
+              <p class="text-sm font-medium text-gray-900">Total Exit Tickets</p>
               <p class="text-2xl font-bold text-blue-600">{exercises.length}</p>
             </div>
           </div>
@@ -137,7 +137,7 @@
       </div>
     </div>
 
-    <!-- Assignments List -->
+    <!-- Exit Tickets List -->
     {#if loading}
       <div class="text-center py-16">
         <div class="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -145,8 +145,8 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
         </div>
-        <h3 class="text-lg font-medium text-gray-900 mb-2">Loading assignments...</h3>
-        <p class="text-gray-600">Please wait while we fetch your assignments.</p>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">Loading exit tickets...</h3>
+        <p class="text-gray-600">Please wait while we fetch your exit tickets.</p>
       </div>
     {:else if exercises.length > 0}
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -243,7 +243,7 @@
                       View Submission →
                     {/if}
                   {:else}
-                    Start Assignment →
+                    Start Exit Ticket →
                   {/if}
                 </span>
               </div>
@@ -259,8 +259,8 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
         </div>
-        <h3 class="text-xl font-semibold text-gray-900 mb-3">No assignments yet</h3>
-        <p class="text-gray-600 mb-8 max-w-md mx-auto">Your teachers will assign exercises to your classes. Check back later for new assignments.</p>
+        <h3 class="text-xl font-semibold text-gray-900 mb-3">No exit tickets yet</h3>
+        <p class="text-gray-600 mb-8 max-w-md mx-auto">Your teachers will assign exit tickets to your classes. Check back later for new exit tickets.</p>
         <button 
           class="inline-flex items-center px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors"
           on:click={() => goto('/dashboard')}

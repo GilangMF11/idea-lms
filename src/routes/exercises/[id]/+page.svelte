@@ -329,7 +329,7 @@
 </script>
 
 <svelte:head>
-  <title>{exercise?.title || 'Exercise'} - LMS</title>
+  <title>{exercise?.title || 'Exercise'} - IDEA</title>
 </svelte:head>
 
 <div class="min-h-screen bg-gray-50">

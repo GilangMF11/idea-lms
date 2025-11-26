@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
   import { authStore } from '$lib/stores/auth.js';
   import Button from '$lib/components/Button.svelte';
   
@@ -10,17 +11,58 @@
   let classes: any[] = [];
   let exercises: any[] = [];
   let readingTexts: any[] = [];
+  let totalUsers = 0;
   let loading = true;
   let error = '';
   
-  onMount(() => {
+  onMount(async () => {
     authStore.init();
+    
+    // Sync auth from cookie if OAuth success
+    if ($page.url.searchParams.get('oauth_success') === 'true') {
+      try {
+        const response = await fetch('/api/auth/sync', {
+          credentials: 'include', // Important: include cookies
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.user && data.token) {
+            // Update auth store
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('auth_token', data.token);
+              localStorage.setItem('auth_user', JSON.stringify(data.user));
+            }
+            // Re-init auth store to load from localStorage
+            authStore.init();
+            // Check if profile is complete
+            if (!data.profileComplete) {
+              goto('/complete-profile', { replaceState: true });
+              return;
+            }
+            // Remove query parameter after sync
+            goto('/dashboard', { replaceState: true });
+            return; // Exit early to prevent redirect to login
+          }
+        } else {
+          console.error('Auth sync failed:', await response.text());
+        }
+        // Remove query parameter even if sync failed
+        goto('/dashboard', { replaceState: true });
+      } catch (err) {
+        console.error('Auth sync error:', err);
+        // Remove query parameter on error
+        goto('/dashboard', { replaceState: true });
+      }
+    }
     
     // Redirect to login if not authenticated
     if (!$authStore.isAuthenticated) {
       goto('/login');
       return;
     }
+
+    // Check if profile is complete before loading dashboard
+    await checkProfileComplete();
     
     // Load dashboard data based on user role
     loadDashboardData();
@@ -40,6 +82,33 @@
     };
   });
 
+  async function checkProfileComplete() {
+    try {
+      const token = $authStore.token;
+      if (!token) return;
+
+      const response = await fetch('/api/auth/sync', {
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Profile complete check in dashboard:', {
+          profileComplete: data.profileComplete,
+          userId: data.user?.id,
+        });
+        
+        if (!data.profileComplete) {
+          console.log('Profile not complete, redirecting to complete-profile');
+          goto('/complete-profile');
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('Error checking profile:', err);
+    }
+  }
+
   async function loadDashboardData() {
     try {
       loading = true;
@@ -58,6 +127,9 @@
       if (classesResponse.ok) {
         const classesData = await classesResponse.json();
         classes = classesData.classes || [];
+        console.log('Loaded classes:', classes); // Debug log
+      } else {
+        console.error('Failed to load classes:', await classesResponse.text());
       }
       
       // Load exercises for first class if available
@@ -87,6 +159,21 @@
         if (readingTextsResponse.ok) {
           const readingTextsData = await readingTextsResponse.json();
           readingTexts = readingTextsData.readingTexts || [];
+        }
+      }
+      
+      // Load total users for admin
+      if ($authStore.user?.role === 'ADMIN') {
+        const usersResponse = await fetch('/api/users?limit=1', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (usersResponse.ok) {
+          const usersData = await usersResponse.json();
+          totalUsers = usersData.total || 0;
         }
       }
       
@@ -122,7 +209,7 @@
 </script>
 
 <svelte:head>
-  <title>Dashboard - LMS Light</title>
+  <title>Dashboard - IDEA</title>
 </svelte:head>
 
 {#if $authStore.isLoading}
@@ -151,7 +238,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
               </svg>
             </div>
-            <h1 class="text-xl font-semibold text-gray-900">LMS Light</h1>
+            <h1 class="text-xl font-semibold text-gray-900">IDEA</h1>
           </div>
           
           <div class="flex items-center space-x-4">
@@ -214,7 +301,7 @@
         </h2>
         <p class="text-gray-600 capitalize">
           {#if $authStore.user?.role === 'STUDENT'}
-            Here's your learning dashboard with assignments and class activities.
+            Here's your learning dashboard with exit tickets and class activities.
           {:else if $authStore.user?.role === 'TEACHER'}
             Manage your classes, create content, and track student progress.
           {:else if $authStore.user?.role === 'ADMIN'}
@@ -380,7 +467,7 @@
           </svg>
         </div>
         <div class="ml-4">
-          <p class="text-sm font-medium text-gray-600">Assignments</p>
+          <p class="text-sm font-medium text-gray-600">Exit Tickets</p>
           <p class="text-2xl font-semibold text-gray-900">{exercises.length}</p>
         </div>
       </div>
@@ -408,16 +495,26 @@
       <h3 class="text-lg font-semibold text-gray-900 mb-4">My Classes</h3>
       {#if classes.length > 0}
         <div class="space-y-3">
-          {#each classes as classItem}
-            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-              <div>
-                <p class="text-sm font-medium text-gray-900">{classItem.name}</p>
+          {#each classes as classItem (classItem.id)}
+            <button
+              type="button"
+              class="w-full flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+              on:click={() => {
+                if (classItem?.id) {
+                  goto(`/classes/${classItem.id}`);
+                } else {
+                  console.error('Class ID tidak ditemukan:', classItem);
+                }
+              }}
+            >
+              <div class="flex-1">
+                <p class="text-sm font-medium text-gray-900">{classItem.name || 'Unnamed Class'}</p>
                 <p class="text-xs text-gray-500">{classItem.description || 'No description'}</p>
               </div>
-              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800 ml-3">
                 Active
               </span>
-            </div>
+            </button>
           {/each}
         </div>
       {:else}
@@ -428,29 +525,33 @@
           <h3 class="mt-2 text-sm font-medium text-gray-900">No classes yet</h3>
           <p class="mt-1 text-sm text-gray-500">Join a class to get started with your learning journey.</p>
           <div class="mt-6">
-            <Button variant="primary" size="sm">
-              Join Class
+            <Button variant="primary" size="sm" on:click={() => goto('/classes/browse')}>
+              Browse Classes
             </Button>
           </div>
         </div>
       {/if}
     </div>
 
-    <!-- Recent Assignments -->
+    <!-- Recent Exit Tickets -->
     <div class="card p-6">
-      <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Assignments</h3>
+      <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Exit Tickets</h3>
       {#if exercises.length > 0}
         <div class="space-y-3">
           {#each exercises.slice(0, 3) as exercise}
-            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-              <div>
+            <button
+              type="button"
+              class="w-full flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors text-left"
+              on:click={() => goto(`/exercises/${exercise.id}`)}
+            >
+              <div class="flex-1">
                 <p class="text-sm font-medium text-gray-900">{exercise.title}</p>
                 <p class="text-xs text-gray-500">{exercise.description || 'No description'}</p>
               </div>
-              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 ml-3">
                 Pending
               </span>
-            </div>
+            </button>
           {/each}
         </div>
       {:else}
@@ -458,8 +559,8 @@
           <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          <h3 class="mt-2 text-sm font-medium text-gray-900">No assignments yet</h3>
-          <p class="mt-1 text-sm text-gray-500">Assignments will appear here when your teachers post them.</p>
+          <h3 class="mt-2 text-sm font-medium text-gray-900">No exit tickets yet</h3>
+          <p class="mt-1 text-sm text-gray-500">Exit tickets will appear here when your teachers post them.</p>
         </div>
       {/if}
     </div>
@@ -470,19 +571,19 @@
     <div class="card p-6">
       <h3 class="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Button variant="primary" size="md" fullWidth>
+        <Button variant="primary" size="md" fullWidth on:click={() => goto('/classes/browse')}>
           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
           </svg>
-          Join Class
+          Browse Classes
         </Button>
-        <Button variant="secondary" size="md" fullWidth>
+        <Button variant="secondary" size="md" fullWidth on:click={() => goto('/assignments')}>
           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          View Assignments
+          View Exit Tickets
         </Button>
-        <Button variant="secondary" size="md" fullWidth>
+        <Button variant="secondary" size="md" fullWidth on:click={() => goto('/profile')}>
           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
           </svg>
@@ -533,7 +634,7 @@
           </svg>
         </div>
         <div class="ml-4">
-          <p class="text-sm font-medium text-gray-600">Assignments</p>
+          <p class="text-sm font-medium text-gray-600">Exit Tickets</p>
           <p class="text-2xl font-semibold text-gray-900">{exercises.length}</p>
         </div>
       </div>
@@ -627,7 +728,7 @@
           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          Create Assignment
+          Create Exit Ticket
         </Button>
         <Button variant="secondary" size="md" fullWidth on:click={() => goto('/analytics')}>
           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -667,7 +768,7 @@
         </div>
         <div class="ml-4">
           <p class="text-sm font-medium text-gray-600">Total Users</p>
-          <p class="text-2xl font-semibold text-gray-900">-</p>
+          <p class="text-2xl font-semibold text-gray-900">{loading ? '-' : totalUsers}</p>
         </div>
       </div>
     </div>
@@ -680,7 +781,7 @@
           </svg>
         </div>
         <div class="ml-4">
-          <p class="text-sm font-medium text-gray-600">Total Assignments</p>
+          <p class="text-sm font-medium text-gray-600">Total Exit Tickets</p>
           <p class="text-2xl font-semibold text-gray-900">{exercises.length}</p>
         </div>
       </div>
@@ -781,7 +882,7 @@
     <div class="card p-6">
       <h3 class="text-lg font-semibold text-gray-900 mb-4">Administrative Actions</h3>
       <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Button variant="primary" size="md" fullWidth>
+        <Button variant="primary" size="md" fullWidth on:click={() => goto('/admin/users')}>
           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
           </svg>

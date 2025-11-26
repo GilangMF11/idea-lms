@@ -145,7 +145,7 @@
 </script>
 
 <svelte:head>
-  <title>Edit {exercise?.title || 'Exercise'} - LMS</title>
+  <title>Edit {exercise?.title || 'Exercise'} - IDEA</title>
 </svelte:head>
 
 <div class="min-h-screen bg-gray-50">

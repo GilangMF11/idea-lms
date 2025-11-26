@@ -324,7 +324,7 @@
 </script>
 
 <svelte:head>
-  <title>Submissions Management - LMS</title>
+  <title>Submissions Management - IDEA</title>
 </svelte:head>
 
 <div class="min-h-screen bg-gray-50">

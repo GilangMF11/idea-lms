@@ -274,7 +274,7 @@
 </script>
 
 <svelte:head>
-  <title>Edit Reading Text - LMS Light</title>
+  <title>Edit Reading Text - IDEA</title>
 </svelte:head>
 
 <div class="min-h-screen bg-gray-50">

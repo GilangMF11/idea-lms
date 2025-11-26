@@ -49,7 +49,7 @@
 </script>
 
 <svelte:head>
-  <title>Analytics - LMS Light</title>
+  <title>Analytics - IDEA</title>
 </svelte:head>
 
 <div class="min-h-screen bg-gray-50">
