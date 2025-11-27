@@ -17,6 +17,7 @@
   let newStudentEmail = '';
   let addStudentLoading = false;
   let addStudentError = '';
+  let loadingStudents = false;
   let allStudents: any[] = [];
   let selectedStudents: string[] = [];
   let searchQuery = '';
@@ -162,6 +163,8 @@
 
   async function loadAllStudents() {
     try {
+      loadingStudents = true;
+      addStudentError = '';
       console.log('Loading all students...');
       const response = await fetch('/api/users?role=STUDENT', {
         headers: {
@@ -175,21 +178,39 @@
         const data = await response.json();
         allStudents = data.users || [];
         console.log('All students loaded:', allStudents.length);
+        if (allStudents.length > 0) {
+          console.log('Sample student data:', allStudents[0]);
+        }
       } else {
-        console.error('Failed to load all students:', await response.text());
+        const errorText = await response.text();
+        console.error('Failed to load all students:', response.status, errorText);
+        let errorMessage = 'Failed to load students';
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          errorMessage = response.status === 403 ? 'Access denied' : 'Server error';
+        }
+        addStudentError = errorMessage;
+        allStudents = [];
       }
     } catch (err) {
       console.error('Error loading students:', err);
+      addStudentError = 'Failed to load students. Please try again.';
+      allStudents = [];
+    } finally {
+      loadingStudents = false;
     }
   }
 
-  function addStudent() {
+  async function addStudent() {
     console.log('Add Student button clicked');
-    console.log('Current loading state:', loading);
-    console.log('Current showAddStudentModal state:', showAddStudentModal);
     showAddStudentModal = true;
     addStudentError = '';
     selectedStudents = [];
+    
+    // Reload students list to ensure we have the latest data
+    await loadAllStudents();
     console.log('Modal should be open now:', showAddStudentModal);
   }
 
@@ -272,13 +293,13 @@
   $: console.log('All students count:', allStudents.length);
 
   // Computed property for filtered students
-  $: filteredStudents = allStudents.filter(student => {
+  $: filteredStudents = (allStudents || []).filter(student => {
     if (!searchQuery.trim()) return true;
     
     const query = searchQuery.toLowerCase();
-    const fullName = `${student.firstName} ${student.lastName}`.toLowerCase();
-    const email = student.email.toLowerCase();
-    const username = student.username.toLowerCase();
+    const fullName = `${student.firstName || ''} ${student.lastName || ''}`.toLowerCase();
+    const email = (student.email || '').toLowerCase();
+    const username = (student.username || '').toLowerCase();
     
     return fullName.includes(query) || 
            email.includes(query) || 
@@ -932,12 +953,22 @@
 
           <!-- Students List -->
           <div class="max-h-96 overflow-y-auto border border-gray-200 rounded-md">
-            {#if filteredStudents.length === 0}
+            {#if loadingStudents}
+              <div class="p-8 text-center">
+                <svg class="animate-spin h-8 w-8 text-primary-600 mx-auto" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <p class="mt-2 text-sm text-gray-500">Loading students...</p>
+              </div>
+            {:else if filteredStudents.length === 0}
               <div class="p-4 text-center text-gray-500">
                 {#if searchQuery.trim()}
                   No students found matching "{searchQuery}"
+                {:else if allStudents.length === 0}
+                  No students available in the system
                 {:else}
-                  No students available
+                  No students available (all are already enrolled)
                 {/if}
               </div>
             {:else}

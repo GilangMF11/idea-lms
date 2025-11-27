@@ -78,14 +78,24 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
       return json({ user: targetUser });
     }
 
-    // Get users list - Only ADMIN can view all users
-    if (user.role !== 'ADMIN') {
-      return json({ error: 'Only administrators can view all users' }, { status: 403 });
+    // Get users list - ADMIN can view all users, TEACHER can view students only
+    if (user.role !== 'ADMIN' && user.role !== 'TEACHER') {
+      return json({ error: 'Access denied' }, { status: 403 });
+    }
+
+    // TEACHER can only view students
+    let effectiveRole = role;
+    if (user.role === 'TEACHER') {
+      if (role && role !== 'STUDENT') {
+        return json({ error: 'Teachers can only view students' }, { status: 403 });
+      }
+      // Force role to STUDENT for teachers
+      effectiveRole = 'STUDENT';
     }
 
     const whereClause: any = {};
-    if (role) {
-      whereClause.role = role;
+    if (effectiveRole) {
+      whereClause.role = effectiveRole;
     }
     if (isActiveParam !== null && isActiveParam !== '') {
       whereClause.isActive = isActiveParam === 'true';

@@ -88,13 +88,17 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
       return json({ error: 'Access denied' }, { status: 403 });
     }
 
-    // Check if student exists
+    // Check if student exists and is a student
     const student = await prisma.user.findUnique({
-      where: { id: studentId, role: 'STUDENT' }
+      where: { id: studentId }
     });
 
     if (!student) {
       return json({ error: 'Student not found' }, { status: 404 });
+    }
+
+    if (student.role !== 'STUDENT') {
+      return json({ error: 'User is not a student' }, { status: 400 });
     }
 
     // Check if student is already in the class

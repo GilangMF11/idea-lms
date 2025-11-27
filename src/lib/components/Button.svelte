@@ -6,6 +6,10 @@
   export let type: 'button' | 'submit' | 'reset' = 'button';
   export let fullWidth: boolean = false;
   
+  // Extract class from $$restProps if provided
+  let className = '';
+  export { className as class };
+  
   $: classes = [
     'inline-flex items-center justify-center font-medium rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2',
     variant === 'primary' && 'bg-primary-600 hover:bg-primary-700 text-white focus:ring-primary-500',
@@ -16,7 +20,8 @@
     size === 'lg' && 'px-6 py-3 text-base',
     fullWidth && 'w-full',
     disabled && 'opacity-50 cursor-not-allowed',
-    loading && 'opacity-75 cursor-wait'
+    loading && 'opacity-75 cursor-wait',
+    className
   ].filter(Boolean).join(' ');
 </script>
 
