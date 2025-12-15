@@ -5,8 +5,9 @@
   export let loading: boolean = false;
   export let type: 'button' | 'submit' | 'reset' = 'button';
   export let fullWidth: boolean = false;
+  export let title = '';
   
-  // Extract class from $$restProps if provided
+  // Accept additional class names
   let className = '';
   export { className as class };
   
@@ -25,7 +26,7 @@
   ].filter(Boolean).join(' ');
 </script>
 
-<button {type} {disabled} class={classes} on:click>
+<button {type} {disabled} class={classes} title={title} on:click>
   {#if loading}
     <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
       <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>

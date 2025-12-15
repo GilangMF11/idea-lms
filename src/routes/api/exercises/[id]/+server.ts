@@ -35,7 +35,11 @@ export const GET: RequestHandler = async ({ request, params }: { request: any; p
         readingText: {
           select: {
             id: true,
-            title: true
+            title: true,
+            content: true,
+            author: true,
+            source: true,
+            timerDuration: true
           }
         }
       }

@@ -139,8 +139,24 @@
         console.error('Failed to load classes:', await classesResponse.text());
       }
       
-      // Load exercises for first class if available
-      if (classes.length > 0) {
+      // Load exercises
+      // For students, fetch all exercises from all enrolled classes
+      // For teachers/admins, fetch from first class or all
+      if ($authStore.user?.role === 'STUDENT') {
+        // Fetch all exercises for student (from all enrolled classes)
+        const exercisesResponse = await fetch('/api/exercises', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (exercisesResponse.ok) {
+          const exercisesData = await exercisesResponse.json();
+          exercises = exercisesData.exercises || [];
+        }
+      } else if (classes.length > 0) {
+        // For teachers/admins, fetch from first class
         const exercisesResponse = await fetch(`/api/exercises?classId=${classes[0].id}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -238,44 +254,47 @@
     <!-- Header -->
     <header class="bg-white shadow-sm border-b border-gray-200">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between py-4">
-          <div class="flex items-center">
-            <div class="h-8 w-8 bg-primary-600 rounded-lg flex items-center justify-center mr-3">
+        <div class="flex items-center justify-between py-3 sm:py-4">
+          <div class="flex items-center min-w-0 flex-1">
+            <div class="h-8 w-8 bg-primary-600 rounded-lg flex items-center justify-center mr-2 sm:mr-3 flex-shrink-0">
               <svg class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
               </svg>
             </div>
-            <h1 class="text-xl font-semibold text-gray-900">IDEA</h1>
+            <h1 class="text-lg sm:text-xl font-semibold text-gray-900 truncate">IDEA</h1>
           </div>
           
-          <div class="flex items-center justify-between sm:justify-end space-x-4">
             <!-- User Menu -->
-            <div class="relative user-menu">
+          <div class="relative user-menu flex-shrink-0">
               <button
                 type="button"
-                class="flex items-center space-x-3 text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              class="flex items-center space-x-2 sm:space-x-3 text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 p-1 sm:p-0"
                 on:click={() => showUserMenu = !showUserMenu}
               >
-                <div class="text-right">
-                  <p class="text-sm font-medium text-gray-900">{$authStore.user.firstName} {$authStore.user.lastName}</p>
+              <!-- User info - hidden on mobile, visible on sm and up -->
+              <div class="hidden sm:block text-right">
+                <p class="text-sm font-medium text-gray-900 truncate max-w-[120px]">{$authStore.user.firstName} {$authStore.user.lastName}</p>
                   <p class="text-xs text-gray-500 capitalize">{$authStore.user.role.toLowerCase()}</p>
                 </div>
-                <div class="h-8 w-8 bg-primary-600 rounded-full flex items-center justify-center">
-                  <span class="text-sm font-medium text-white">
+              <!-- Avatar -->
+              <div class="h-8 w-8 sm:h-9 sm:w-9 bg-primary-600 rounded-full flex items-center justify-center flex-shrink-0">
+                <span class="text-xs sm:text-sm font-medium text-white">
                     {$authStore.user.firstName.charAt(0)}{$authStore.user.lastName.charAt(0)}
                   </span>
                 </div>
-                <svg class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <!-- Dropdown icon - hidden on mobile, visible on sm and up -->
+              <svg class="hidden sm:block h-4 w-4 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
 
               <!-- Dropdown Menu -->
               {#if showUserMenu}
-                <div class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200">
+              <div class="absolute right-0 mt-2 w-56 sm:w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200">
                   <div class="px-4 py-2 text-sm text-gray-700 border-b border-gray-100">
-                    <p class="font-medium">{$authStore.user.firstName} {$authStore.user.lastName}</p>
-                    <p class="text-xs text-gray-500">{$authStore.user.email}</p>
+                  <p class="font-medium truncate">{$authStore.user.firstName} {$authStore.user.lastName}</p>
+                  <p class="text-xs text-gray-500 truncate">{$authStore.user.email}</p>
+                  <p class="text-xs text-gray-500 capitalize mt-1 sm:hidden">{$authStore.user.role.toLowerCase()}</p>
                   </div>
                   <a href="/profile" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
                     Profile
@@ -293,7 +312,6 @@
                   </button>
                 </div>
               {/if}
-            </div>
           </div>
         </div>
       </div>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { authStore } from '$lib/stores/auth.js';
@@ -23,6 +23,17 @@
   let showDeleteConfirm = false;
   let editing = false;
   let deleting = false;
+  let timerDurationSeconds = 0;
+  let timerRemainingSeconds = 0;
+  let timerActive = false;
+  let timerFinished = false;
+  let timerInterval: number | null = null;
+  let timerAutoSubmitTriggered = false;
+  let timerAutoSubmitting = false;
+  let autoSubmitEnabled = true;
+  let timerStorageKey: string | null = null;
+  let timerPaused = false;
+  let tabVisible = true;
 
   onMount(async () => {
     authStore.init();
@@ -33,9 +44,34 @@
       return;
     }
 
+    // Listen for tab visibility changes
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+
     await loadExercise();
     await loadSubmissions();
   });
+
+  function handleVisibilityChange() {
+    tabVisible = !document.hidden;
+    if (timerActive && !timerFinished) {
+      if (tabVisible && timerPaused) {
+        // Resume timer
+        timerPaused = false;
+        const now = Date.now();
+        const remainingMs = timerRemainingSeconds * 1000;
+        const newEndTimestamp = now + remainingMs;
+        startExerciseTimer(newEndTimestamp);
+        saveTimerToDatabase(newEndTimestamp, timerRemainingSeconds, false, false);
+      } else if (!tabVisible && !timerPaused) {
+        // Pause timer
+        timerPaused = true;
+        clearTimerInterval();
+        saveTimerToDatabase(Number(timerStorageKey ? JSON.parse(localStorage.getItem(timerStorageKey) || '{}').end : Date.now() + timerRemainingSeconds * 1000), timerRemainingSeconds, true, false);
+      }
+    }
+  }
 
   async function loadExercise() {
     try {
@@ -50,6 +86,8 @@
       if (response.ok) {
         const data = await response.json();
         exercise = data.exercise;
+        autoSubmitEnabled = exercise.autoSubmitOnTimeout ?? true;
+        initExerciseTimer(exercise.timerDuration ?? 0);
       } else {
         const errorData = await response.json();
         error = errorData.error || 'Failed to load exercise';
@@ -81,37 +119,43 @@
         
         // Find current user's submission
         submission = submissions.find(sub => sub.userId === $authStore.user?.id);
+        if (submission) {
+          stopExerciseTimer();
+        }
       }
     } catch (err) {
       console.error('Error loading submissions:', err);
     }
   }
 
-  async function submitExercise() {
-    if (!submissionForm.answer.trim()) {
+  async function submitExercise(auto = false) {
+    const rawAnswer = submissionForm.answer.trim();
+    const finalAnswer = rawAnswer || (auto ? 'Auto-submitted (timer expired)' : '');
+    if (!auto && !finalAnswer) {
       error = 'Please provide an answer';
       return;
     }
 
-    try {
+    if (auto) {
+      timerAutoSubmitting = true;
+      timerAutoSubmitTriggered = true;
+    } else {
       submitting = true;
+    }
+
       error = '';
 
-      const formData = new FormData();
-      formData.append('exerciseId', $page.params.id as string);
-      formData.append('answer', submissionForm.answer.trim());
-      
-      // Add files if any
-      submissionForm.files.forEach((file, index) => {
-        formData.append(`file_${index}`, file);
-      });
-
+    try {
       const response = await fetch('/api/exercise-submissions', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${$authStore.token}`
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
         },
-        body: formData
+        body: JSON.stringify({
+          exerciseId: $page.params.id,
+          answer: finalAnswer
+        })
       });
 
       if (response.ok) {
@@ -119,6 +163,7 @@
         submission = data.submission;
         showSubmissionForm = false;
         submissionForm = { answer: '', files: [], existingFiles: [] };
+        stopExerciseTimer();
         await loadSubmissions();
       } else {
         const errorData = await response.json();
@@ -129,6 +174,7 @@
       error = 'Error submitting exercise';
     } finally {
       submitting = false;
+      timerAutoSubmitting = false;
     }
   }
 
@@ -326,6 +372,195 @@
       deleting = false;
     }
   }
+
+  async function initExerciseTimer(durationSeconds: number) {
+    clearTimerInterval();
+    timerDurationSeconds = durationSeconds || 0;
+    timerRemainingSeconds = timerDurationSeconds;
+    timerActive = timerDurationSeconds > 0;
+    timerFinished = timerDurationSeconds <= 0;
+    timerAutoSubmitTriggered = false;
+    timerAutoSubmitting = false;
+    timerPaused = false;
+
+    if (!timerActive || !$authStore.user || $authStore.user.role !== 'STUDENT') {
+      return;
+    }
+
+    const key = `exercise-timer-${$page.params.id}-${$authStore.user.id}`;
+    timerStorageKey = key;
+    const now = Date.now();
+    let endTimestamp = now + timerDurationSeconds * 1000;
+
+    // Try to load from database first
+    try {
+      const response = await fetch(`/api/exercise-timers?exerciseId=${$page.params.id}`, {
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.timer && !data.timer.isFinished) {
+          // Use existing timer from database
+          endTimestamp = data.timer.endTimestamp;
+          timerRemainingSeconds = data.timer.remainingSeconds;
+          timerPaused = data.timer.isPaused;
+          timerFinished = data.timer.isFinished;
+          
+          // If timer is finished, don't start it
+          if (timerFinished) {
+            return;
+          }
+        } else {
+          // Create new timer in database
+          endTimestamp = now + timerDurationSeconds * 1000;
+          await saveTimerToDatabase(endTimestamp, timerDurationSeconds, false, false);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load timer from database:', err);
+      // Fallback to localStorage
+      try {
+        const saved = localStorage.getItem(key);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.duration === timerDurationSeconds && parsed.end > now) {
+            endTimestamp = parsed.end;
+          } else {
+            localStorage.setItem(key, JSON.stringify({ end: endTimestamp, duration: timerDurationSeconds }));
+          }
+        } else {
+          localStorage.setItem(key, JSON.stringify({ end: endTimestamp, duration: timerDurationSeconds }));
+        }
+      } catch (localErr) {
+        console.error('Failed to read timer state from localStorage:', localErr);
+      }
+    }
+
+    if (!timerPaused && !timerFinished) {
+      startExerciseTimer(endTimestamp);
+    }
+  }
+
+  async function saveTimerToDatabase(endTimestamp: number, remainingSeconds: number, isPaused: boolean, isFinished: boolean) {
+    try {
+      await fetch('/api/exercise-timers', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          exerciseId: $page.params.id,
+          durationSeconds: timerDurationSeconds,
+          remainingSeconds,
+          endTimestamp,
+          isPaused,
+          isFinished
+        })
+      });
+    } catch (err) {
+      console.error('Failed to save timer to database:', err);
+    }
+  }
+
+  function startExerciseTimer(endTimestamp: number) {
+    timerActive = true;
+    clearTimerInterval();
+    updateExerciseTimer(endTimestamp);
+    timerInterval = window.setInterval(() => updateExerciseTimer(endTimestamp), 1000);
+  }
+
+  async function updateExerciseTimer(endTimestamp: number) {
+    if (timerPaused || !tabVisible) {
+      return;
+    }
+
+    const remainingSeconds = Math.max(0, Math.ceil((endTimestamp - Date.now()) / 1000));
+    timerRemainingSeconds = remainingSeconds;
+    timerActive = remainingSeconds > 0;
+    timerFinished = remainingSeconds <= 0;
+
+    // Save to database every 5 seconds
+    if (Date.now() % 5000 < 1000) {
+      await saveTimerToDatabase(endTimestamp, remainingSeconds, timerPaused, timerFinished);
+    }
+
+    if (timerFinished) {
+      clearTimerInterval();
+      await saveTimerToDatabase(endTimestamp, 0, false, true);
+      if (autoSubmitEnabled && !submission) {
+        autoSubmitExercise();
+      }
+    }
+  }
+
+  function autoSubmitExercise() {
+    if (
+      !autoSubmitEnabled ||
+      timerAutoSubmitTriggered ||
+      submission ||
+      $authStore.user?.role !== 'STUDENT'
+    ) {
+      return;
+    }
+
+    timerAutoSubmitTriggered = true;
+    submitExercise(true);
+  }
+
+  async function stopExerciseTimer() {
+    clearTimerInterval();
+    timerActive = false;
+    timerFinished = true;
+    timerRemainingSeconds = 0;
+    timerPaused = false;
+    
+    // Delete from database
+    try {
+      await fetch(`/api/exercise-timers?exerciseId=${$page.params.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+    } catch (err) {
+      console.error('Failed to delete timer from database:', err);
+    }
+
+    if (timerStorageKey) {
+      try {
+        localStorage.removeItem(timerStorageKey);
+      } catch (err) {
+        console.error('Failed to clear timer state:', err);
+      }
+      timerStorageKey = null;
+    }
+  }
+
+  function clearTimerInterval() {
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+  }
+
+  function formatDuration(seconds: number) {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+
+  onDestroy(() => {
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }
+    stopExerciseTimer();
+  });
 </script>
 
 <svelte:head>
@@ -370,6 +605,92 @@
         </div>
       </div>
     </div>
+
+    {#if exercise?.readingText}
+      <div class="mb-6">
+        <div class="bg-white border border-gray-200 rounded-xl shadow p-6">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-gray-900">Reading Text</h2>
+            <a
+              href="/reading-texts/{exercise.readingText.id}"
+              class="text-sm text-primary-600 hover:text-primary-800 font-medium flex items-center"
+            >
+              View Full Text
+              <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+              </svg>
+            </a>
+          </div>
+          <div class="space-y-3">
+            <div>
+              <h3 class="text-base font-semibold text-gray-900 mb-2">{exercise.readingText.title}</h3>
+              {#if exercise.readingText.author}
+                <p class="text-sm text-gray-600 mb-1">
+                  by {exercise.readingText.author}
+                  {#if exercise.readingText.source}
+                    • {exercise.readingText.source}
+                  {/if}
+                </p>
+              {/if}
+            </div>
+            <div class="prose prose-sm max-w-none text-gray-700 leading-relaxed">
+              {@html exercise.readingText.content.substring(0, 500)}
+              {#if exercise.readingText.content.length > 500}
+                <span class="text-gray-500">...</span>
+              {/if}
+            </div>
+            <div class="pt-3 border-t border-gray-200">
+              <a
+                href="/reading-texts/{exercise.readingText.id}"
+                class="inline-flex items-center px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors"
+              >
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+                Read Full Text
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    {#if exercise?.content}
+      <div class="mb-6">
+        <div class="bg-white border border-gray-200 rounded-xl shadow p-6 space-y-3">
+          <div class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-gray-900">Question Content</h2>
+            {#if timerDurationSeconds > 0 && $authStore.user?.role === 'STUDENT'}
+              <span
+                class={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
+                  timerFinished ? 'bg-emerald-100 text-emerald-600' : 'bg-yellow-100 text-yellow-800'
+                }`}
+              >
+                {timerFinished ? 'Timer expired' : 'Timer active'}
+              </span>
+            {/if}
+          </div>
+          <div class="text-sm text-gray-700 leading-relaxed space-y-2">
+            {@html exercise.content}
+          </div>
+          {#if timerDurationSeconds > 0 && $authStore.user?.role === 'STUDENT'}
+            <div class="flex items-center justify-between text-sm text-gray-700">
+              <div>
+                <p class="font-semibold">Time remaining:</p>
+                <p class="text-lg font-bold text-primary-600">{formatDuration(timerRemainingSeconds)}</p>
+              </div>
+              {#if timerAutoSubmitting}
+                <p class="text-xs text-yellow-600">Auto-submitting because timer finished…</p>
+              {:else if timerFinished}
+                <p class="text-xs text-gray-500">
+                  {submission ? 'Submitted automatically' : 'Waiting for auto-submit'}
+                </p>
+              {/if}
+            </div>
+          {/if}
+        </div>
+      </div>
+    {/if}
 
     <!-- Loading State -->
     {#if loading}
@@ -484,31 +805,6 @@
             </div>
           </div>
 
-          <!-- Reading Text Reference -->
-          {#if exercise.readingText}
-            <div class="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border border-purple-200 p-6">
-              <div class="flex items-center space-x-3 mb-4">
-                <div class="w-8 h-8 bg-purple-500 rounded-lg flex items-center justify-center">
-                  <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                  </svg>
-                </div>
-                <h3 class="text-xl font-semibold text-purple-800">Related Reading Text</h3>
-              </div>
-              <div class="bg-white rounded-lg p-4 border border-purple-200">
-                <h4 class="font-semibold text-gray-900 mb-2">{exercise.readingText.title}</h4>
-                <a 
-                  href="/reading-texts/{exercise.readingText.id}" 
-                  class="inline-flex items-center text-purple-600 hover:text-purple-800 font-medium transition-colors"
-                >
-                  <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                  </svg>
-                  View Reading Text
-                </a>
-              </div>
-            </div>
-          {/if}
         </div>
       </div>
 

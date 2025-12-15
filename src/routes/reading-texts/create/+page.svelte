@@ -11,9 +11,12 @@
   let author = '';
   let source = '';
   let classId = '';
+  let groupId = '';
   let classes: any[] = [];
+  let groups: any[] = [];
   let loading = false;
   let error = '';
+  let timerDurationMinutes = '';
   
   // Rich content editor
   let contentBlocks: any[] = [{ type: 'text', content: '' }];
@@ -27,10 +30,26 @@
       return;
     }
 
-    // Get classId from URL params
+    // Get classId and groupId from URL params
     classId = $page.url.searchParams.get('classId') || '';
+    groupId = $page.url.searchParams.get('groupId') || '';
     loadClasses();
+    if (classId) {
+      loadGroups();
+    }
   });
+
+  $: if (classId) {
+    // Load groups when classId changes
+    loadGroups();
+    // Only reset groupId if it's not in URL params
+    if (!$page.url.searchParams.get('groupId')) {
+      groupId = '';
+    }
+  } else {
+    // Clear groups when no class is selected
+    groups = [];
+  }
 
   async function loadClasses() {
     try {
@@ -47,6 +66,34 @@
       }
     } catch (err) {
       console.error('Error loading classes:', err);
+    }
+  }
+
+  async function loadGroups() {
+    if (!classId) {
+      groups = [];
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/groups?classId=${classId}`, {
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        groups = data.groups || [];
+        console.log('Loaded groups:', groups); // Debug log
+      } else {
+        console.error('Failed to load groups:', await response.text());
+        groups = [];
+      }
+    } catch (err) {
+      console.error('Error loading groups:', err);
+      groups = [];
     }
   }
 
@@ -127,6 +174,16 @@
       return;
     }
 
+    let timerSeconds: number | null = null;
+    if (timerDurationMinutes) {
+      const parsedMinutes = Number(timerDurationMinutes);
+      if (Number.isNaN(parsedMinutes) || parsedMinutes <= 0) {
+        error = 'Timer duration must be greater than 0 minutes';
+        return;
+      }
+      timerSeconds = parsedMinutes * 60;
+    }
+
     console.log('Validating content blocks:', contentBlocks);
     if (contentBlocks.length === 0 || contentBlocks.every(block => {
       if (block.type === 'text') return !block.content.trim();
@@ -167,7 +224,9 @@
           content: htmlContent,
           author: author || null,
           source: source || null,
-          classId
+          classId,
+          groupId: groupId || null,
+          timerDuration: timerSeconds
         })
       });
 
@@ -253,6 +312,49 @@
                 <option value={cls.id}>{cls.name}</option>
               {/each}
             </select>
+          </div>
+        </div>
+
+        {#if classId}
+          <div>
+            <label for="groupId" class="block text-sm font-medium text-gray-700 mb-2">
+              Group (Optional)
+              <span class="text-xs font-normal text-gray-500 ml-1">- Leave empty to assign to class</span>
+            </label>
+            <select
+              id="groupId"
+              bind:value={groupId}
+              class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+            >
+              <option value="">No group (assign to class)</option>
+              {#each groups as group}
+                <option value={group.id}>{group.name} ({group._count.members} members)</option>
+              {/each}
+            </select>
+            {#if groups.length === 0 && classId}
+              <p class="mt-1 text-xs text-gray-500">No groups available in this class. Create a group first.</p>
+            {/if}
+          </div>
+        {/if}
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label for="timerDuration" class="block text-sm font-medium text-gray-700 mb-2">
+              Timer (minutes, optional)
+            </label>
+            <input
+              id="timerDuration"
+              type="number"
+              min="1"
+              step="1"
+              inputmode="numeric"
+              bind:value={timerDurationMinutes}
+              class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              placeholder="Set countdown before exit tickets unlock"
+            />
+            <p class="mt-1 text-xs text-gray-500">
+              Leave blank to skip the timer. The countdown starts when a student opens this reading text.
+            </p>
           </div>
         </div>
 

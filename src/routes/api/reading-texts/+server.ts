@@ -37,6 +37,12 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
                 }
               }
             }
+          },
+          group: {
+            select: {
+              id: true,
+              name: true
+            }
           }
         }
       });
@@ -57,6 +63,20 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
 
         if (!enrollment) {
           return json({ error: 'Access denied' }, { status: 403 });
+        }
+
+        // If reading text is assigned to a group, check if student is a member of that group
+        if (readingText.groupId) {
+          const groupMembership = await prisma.groupMember.findFirst({
+            where: {
+              groupId: readingText.groupId,
+              studentId: user.id
+            }
+          });
+
+          if (!groupMembership) {
+            return json({ error: 'Access denied: You are not a member of this group' }, { status: 403 });
+          }
         }
       } else if (user.role === 'TEACHER') {
         // Check if teacher owns the class
@@ -91,10 +111,36 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
         }
       }
 
+      // Build where clause based on user role and group membership
+      const whereClause: any = { classId };
+      
+      if (user.role === 'STUDENT') {
+        // For students, only show reading texts that are:
+        // 1. Not assigned to any group (groupId is null) - accessible to all class members
+        // 2. Assigned to a group where the student is a member
+        const studentGroups = await prisma.groupMember.findMany({
+          where: { studentId: user.id },
+          select: { groupId: true }
+        });
+        
+        const groupIds = studentGroups.map(gm => gm.groupId);
+        
+        whereClause.OR = [
+          { groupId: null }, // Reading texts for entire class
+          { groupId: { in: groupIds } } // Reading texts for groups where student is a member
+        ];
+      }
+
       readingTexts = await prisma.readingText.findMany({
-        where: { classId },
+        where: whereClause,
         include: {
           class: {
+            select: {
+              id: true,
+              name: true
+            }
+          },
+          group: {
             select: {
               id: true,
               name: true
@@ -121,12 +167,30 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
 
         const classIds = studentClasses.map(sc => sc.classId);
 
+        // Get groups where student is a member
+        const studentGroups = await prisma.groupMember.findMany({
+          where: { studentId: user.id },
+          select: { groupId: true }
+        });
+        
+        const groupIds = studentGroups.map(gm => gm.groupId);
+
         readingTexts = await prisma.readingText.findMany({
           where: {
-            classId: { in: classIds }
+            classId: { in: classIds },
+            OR: [
+              { groupId: null }, // Reading texts for entire class
+              { groupId: { in: groupIds } } // Reading texts for groups where student is a member
+            ]
           },
           include: {
             class: {
+              select: {
+                id: true,
+                name: true
+              }
+            },
+            group: {
               select: {
                 id: true,
                 name: true
@@ -152,6 +216,12 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
           },
           include: {
             class: {
+              select: {
+                id: true,
+                name: true
+              }
+            },
+            group: {
               select: {
                 id: true,
                 name: true
@@ -210,7 +280,19 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
       return json({ error: 'Only teachers can create reading texts' }, { status: 403 });
     }
 
-    const { title, content, author, source, classId, isActive = true } = await request.json();
+    const { title, content, author, source, classId, groupId, isActive = true, timerDuration } = await request.json();
+
+    const normalizedTimerDuration =
+      timerDuration !== undefined && timerDuration !== null && timerDuration !== ''
+        ? Number(timerDuration)
+        : null;
+
+    if (
+      normalizedTimerDuration !== null &&
+      (Number.isNaN(normalizedTimerDuration) || normalizedTimerDuration < 0)
+    ) {
+      return json({ error: 'Timer duration must be a non-negative number' }, { status: 400 });
+    }
 
     if (!title || !content || !classId) {
       return json({ error: 'Title, content, and Class ID are required' }, { status: 400 });
@@ -229,6 +311,20 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
       return json({ error: 'Access denied' }, { status: 403 });
     }
 
+    // If groupId is provided, verify it exists and belongs to the class
+    if (groupId) {
+      const group = await prisma.group.findFirst({
+        where: {
+          id: groupId,
+          classId: classId
+        }
+      });
+
+      if (!group) {
+        return json({ error: 'Group not found or does not belong to this class' }, { status: 404 });
+      }
+    }
+
     // Create reading text
     const readingText = await prisma.readingText.create({
       data: {
@@ -237,7 +333,9 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
         author: author || null,
         source: source || null,
         classId,
-        isActive
+        groupId: groupId || null,
+        isActive,
+        timerDuration: normalizedTimerDuration
       },
       include: {
         class: {
@@ -269,7 +367,21 @@ export const PUT: RequestHandler = async ({ request }: { request: any }) => {
       return json({ error: 'Only teachers can update reading texts' }, { status: 403 });
     }
 
-    const { id, title, content, author, source, isActive } = await request.json();
+    const { id, title, content, author, source, groupId, isActive, timerDuration } = await request.json();
+
+    const normalizedTimerDuration =
+      timerDuration !== undefined && timerDuration !== null && timerDuration !== ''
+        ? Number(timerDuration)
+        : null;
+
+    if (
+      timerDuration !== undefined &&
+      timerDuration !== null &&
+      timerDuration !== '' &&
+      (Number.isNaN(normalizedTimerDuration) || normalizedTimerDuration < 0)
+    ) {
+      return json({ error: 'Timer duration must be a non-negative number' }, { status: 400 });
+    }
 
     if (!id) {
       return json({ error: 'Reading text ID is required' }, { status: 400 });
@@ -291,15 +403,36 @@ export const PUT: RequestHandler = async ({ request }: { request: any }) => {
       return json({ error: 'Access denied' }, { status: 403 });
     }
 
+    // If groupId is provided, verify it exists and belongs to the class
+    if (groupId !== undefined) {
+      if (groupId) {
+        const group = await prisma.group.findFirst({
+          where: {
+            id: groupId,
+            classId: existingReadingText.classId
+          }
+        });
+
+        if (!group) {
+          return json({ error: 'Group not found or does not belong to this class' }, { status: 404 });
+        }
+      }
+    }
+
     // Update reading text
     const readingText = await prisma.readingText.update({
       where: { id },
       data: {
         title: title || existingReadingText.title,
         content: content || existingReadingText.content,
+        groupId: groupId !== undefined ? (groupId || null) : existingReadingText.groupId,
         author: author !== undefined ? author : existingReadingText.author,
         source: source !== undefined ? source : existingReadingText.source,
-        isActive: isActive !== undefined ? isActive : existingReadingText.isActive
+        isActive: isActive !== undefined ? isActive : existingReadingText.isActive,
+        timerDuration:
+          timerDuration !== undefined
+            ? normalizedTimerDuration
+            : existingReadingText.timerDuration
       },
       include: {
         class: {

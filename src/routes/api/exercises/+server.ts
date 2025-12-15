@@ -16,17 +16,33 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
       return json({ error: 'Invalid token' }, { status: 401 });
     }
 
-    const classId = url.searchParams.get('classId');
-    
+    const classIdParam = url.searchParams.get('classId');
+    const readingTextId = url.searchParams.get('readingTextId');
+
     let exercises;
-    
-    if (classId) {
+    let effectiveClassId = classIdParam;
+    let readingTextForAccess: any = null;
+
+    if (readingTextId) {
+      readingTextForAccess = await prisma.readingText.findUnique({
+        where: { id: readingTextId },
+        include: { class: true }
+      });
+
+      if (!readingTextForAccess) {
+        return json({ error: 'Reading text not found' }, { status: 404 });
+      }
+
+      effectiveClassId = readingTextForAccess.classId;
+    }
+
+    if (effectiveClassId) {
       // Get exercises for specific class
       if (user.role === 'STUDENT') {
         // Check if student is enrolled in the class
         const enrollment = await prisma.classStudent.findFirst({
           where: {
-            classId,
+            classId: effectiveClassId,
             studentId: user.id
           }
         });
@@ -36,17 +52,25 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
         }
       } else if (user.role === 'TEACHER') {
         // Check if teacher owns the class
-        const classData = await prisma.class.findUnique({
-          where: { id: classId }
-        });
+        let classData = readingTextForAccess?.class;
+        if (!classData) {
+          classData = await prisma.class.findUnique({
+            where: { id: effectiveClassId }
+          });
+        }
 
         if (!classData || classData.teacherId !== user.id) {
           return json({ error: 'Access denied' }, { status: 403 });
         }
       }
 
+      const whereClause: any = { classId: effectiveClassId };
+      if (readingTextId) {
+        whereClause.readingTextId = readingTextId;
+      }
+
       exercises = await prisma.exercise.findMany({
-        where: { classId },
+        where: whereClause,
         include: {
           class: {
             select: {
@@ -57,7 +81,13 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
           readingText: {
             select: {
               id: true,
-              title: true
+              title: true,
+              timerDuration: true
+            } as any
+          },
+          _count: {
+            select: {
+              submissions: true
             }
           }
         },
@@ -90,7 +120,13 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
             readingText: {
               select: {
                 id: true,
-                title: true
+                title: true,
+                timerDuration: true
+              } as any
+            },
+            _count: {
+              select: {
+                submissions: true
               }
             }
           },
@@ -168,10 +204,32 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
       return json({ error: 'Only teachers can create exercises' }, { status: 403 });
     }
 
-    const { title, description, instructions, classId, readingTextId, dueDate, points } = await request.json();
+    const {
+      title,
+      description,
+      content,
+      classId,
+      readingTextId,
+      dueDate,
+      timerDuration,
+      autoSubmitOnTimeout = true
+    } = await request.json();
 
     if (!title || !classId) {
       return json({ error: 'Title and Class ID are required' }, { status: 400 });
+    }
+
+    if (!content || !content.trim()) {
+      return json({ error: 'Exercise content is required' }, { status: 400 });
+    }
+
+    let normalizedTimerDuration: number | null = null;
+    if (timerDuration !== undefined && timerDuration !== null && timerDuration !== '') {
+      const parsed = Number(timerDuration);
+      if (Number.isNaN(parsed) || parsed < 0) {
+        return json({ error: 'Timer duration must be a non-negative number' }, { status: 400 });
+      }
+      normalizedTimerDuration = parsed;
     }
 
     // Check if class exists and user is the teacher
@@ -191,14 +249,14 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
     const exercise = await prisma.exercise.create({
       data: {
         title,
-        description,
-        instructions,
+        description: description || null,
+        content,
         classId,
         readingTextId: readingTextId || null,
         dueDate: dueDate ? new Date(dueDate) : null,
-        points: points || 100,
-        createdBy: user.id
-      },
+        ...(normalizedTimerDuration !== null && { timerDuration: normalizedTimerDuration }),
+        ...(autoSubmitOnTimeout !== undefined && { autoSubmitOnTimeout: Boolean(autoSubmitOnTimeout) })
+      } as any,
       include: {
         class: {
           select: {
@@ -235,7 +293,15 @@ export const PUT: RequestHandler = async ({ request }: { request: any }) => {
       return json({ error: 'Only teachers can update exercises' }, { status: 403 });
     }
 
-    const { id, title, description, instructions, dueDate, points } = await request.json();
+    const {
+      id,
+      title,
+      description,
+      content,
+      dueDate,
+      timerDuration,
+      autoSubmitOnTimeout
+    } = await request.json();
 
     if (!id) {
       return json({ error: 'Exercise ID is required' }, { status: 400 });
@@ -258,15 +324,25 @@ export const PUT: RequestHandler = async ({ request }: { request: any }) => {
     }
 
     // Update exercise
+    let normalizedTimerDuration: number | null = null;
+    if (timerDuration !== undefined && timerDuration !== null && timerDuration !== '') {
+      const parsed = Number(timerDuration);
+      if (Number.isNaN(parsed) || parsed < 0) {
+        return json({ error: 'Timer duration must be a non-negative number' }, { status: 400 });
+      }
+      normalizedTimerDuration = parsed;
+    }
+
     const exercise = await prisma.exercise.update({
       where: { id },
       data: {
-        title: title || existingExercise.title,
+        title: title !== undefined ? title : existingExercise.title,
         description: description !== undefined ? description : existingExercise.description,
-        instructions: instructions || existingExercise.instructions,
+        content: content !== undefined ? content : existingExercise.content,
         dueDate: dueDate ? new Date(dueDate) : existingExercise.dueDate,
-        points: points || existingExercise.points
-      },
+        ...(timerDuration !== undefined && { timerDuration: normalizedTimerDuration }),
+        ...(autoSubmitOnTimeout !== undefined && { autoSubmitOnTimeout: Boolean(autoSubmitOnTimeout) })
+      } as any,
       include: {
         class: {
           select: {

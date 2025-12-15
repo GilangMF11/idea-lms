@@ -220,7 +220,7 @@
                     id="title"
                     bind:value={formData.title}
                     class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="Enter exercise title"
+                    placeholder="Enter exit ticket title"
                     required
                   />
                 </div>

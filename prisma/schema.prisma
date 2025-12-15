@@ -59,12 +59,15 @@ model User {
   annotations         Annotation[]
   chatMessages        ChatMessage[]
   exerciseSubmissions ExerciseSubmission[]
+  exerciseTimers      ExerciseTimer[]
+  readingTextTimers   ReadingTextTimer[]
   writingOutlines     WritingOutline[]
   writingDrafts       WritingDraft[]
   peerReviews         PeerReview[]
   revisions           Revision[]
   revisionComments    RevisionComment[]
   finalProducts       FinalProduct[]
+  groupMembers        GroupMember[]
   History             History[]
 
   @@map("users")
@@ -92,6 +95,7 @@ model Class {
   peerReviews     PeerReview[]
   revisions       Revision[]
   finalProducts   FinalProduct[]
+  groups          Group[]
   History         History[]
 
   @@map("classes")
@@ -111,11 +115,45 @@ model ClassStudent {
   @@map("class_students")
 }
 
+model Group {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  classId     String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  class        Class          @relation(fields: [classId], references: [id])
+  members      GroupMember[]
+  readingTexts ReadingText[]
+
+  @@map("groups")
+}
+
+model GroupMember {
+  id        String   @id @default(cuid())
+  groupId   String
+  studentId String  // Reference to User (student)
+  role      String?  // Optional: 'leader', 'member', etc.
+  joinedAt  DateTime @default(now())
+
+  // Relations
+  group   Group @relation(fields: [groupId], references: [id])
+  student User  @relation(fields: [studentId], references: [id])
+
+  @@unique([groupId, studentId])
+  @@map("group_members")
+}
+
 model ReadingText {
   id        String   @id @default(cuid())
   title     String
   content   String
   classId   String
+  groupId   String?  // Optional - untuk reading text yang dikelompokkan
+  timerDuration Int? // Countdown timer in seconds (optional)
   author    String?
   source    String?
   isActive  Boolean  @default(true)
@@ -124,8 +162,10 @@ model ReadingText {
 
   // Relations
   class       Class        @relation(fields: [classId], references: [id])
+  group       Group?       @relation(fields: [groupId], references: [id])
   annotations Annotation[]
   exercises   Exercise[]
+  timers      ReadingTextTimer[]
 
   @@map("reading_texts")
 }
@@ -190,11 +230,14 @@ model Exercise {
   isActive      Boolean      @default(true)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
+  timerDuration Int?         // Timer in seconds
+  autoSubmitOnTimeout Boolean @default(true)
 
   // Relations
   readingText ReadingText?         @relation(fields: [readingTextId], references: [id])
   class       Class                @relation(fields: [classId], references: [id])
   submissions ExerciseSubmission[]
+  timers      ExerciseTimer[]
 
   @@map("exercises")
 }
@@ -215,6 +258,46 @@ model ExerciseSubmission {
 
   @@unique([exerciseId, userId])
   @@map("exercise_submissions")
+}
+
+model ExerciseTimer {
+  id              String   @id @default(cuid())
+  exerciseId      String
+  userId          String
+  durationSeconds Int      // Total duration in seconds
+  remainingSeconds Int     // Remaining seconds
+  endTimestamp    BigInt   // End timestamp in milliseconds
+  isPaused        Boolean  @default(false)
+  isFinished      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  exercise Exercise @relation(fields: [exerciseId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@unique([exerciseId, userId])
+  @@map("exercise_timers")
+}
+
+model ReadingTextTimer {
+  id              String     @id @default(cuid())
+  readingTextId   String
+  userId          String
+  durationSeconds Int        // Total duration in seconds
+  remainingSeconds Int       // Remaining seconds
+  endTimestamp    BigInt     // End timestamp in milliseconds
+  isPaused        Boolean    @default(false)
+  isFinished      Boolean    @default(false)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  // Relations
+  readingText ReadingText @relation(fields: [readingTextId], references: [id])
+  user        User        @relation(fields: [userId], references: [id])
+
+  @@unique([readingTextId, userId])
+  @@map("reading_text_timers")
 }
 
 model WritingOutline {

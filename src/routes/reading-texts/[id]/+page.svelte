@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { authStore } from '$lib/stores/auth.js';
@@ -32,6 +32,17 @@
   let audioUploading = false;
   let audioError = '';
   let audioInput: HTMLInputElement;
+  let exitTickets: any[] = [];
+  let exitTicketsLoading = false;
+  let exitTicketsError = '';
+  let timerDurationSeconds = 0;
+  let timerRemainingSeconds = 0;
+  let timerActive = false;
+  let timerFinished = false;
+  let timerInterval: number | null = null;
+  let exitTicketsUnlocked = true;
+
+  $: exitTicketsUnlocked = timerDurationSeconds === 0 || timerFinished;
 
   // Highlight colors for annotated text (rotating palette)
   const annotationHighlightColors = [
@@ -59,6 +70,10 @@
     loadAnnotations();
   });
 
+  onDestroy(() => {
+    clearTimerInterval();
+  });
+
   async function loadReadingText() {
     try {
       loading = true;
@@ -79,6 +94,8 @@
       if (response.ok) {
         const result = await response.json();
         readingText = result.readingText;
+        initReadingTimer(readingText?.timerDuration ?? 0);
+        loadExitTickets();
       } else {
         error = 'Failed to load reading text';
       }
@@ -108,6 +125,121 @@
     } catch (err) {
       console.error('Error loading annotations:', err);
     }
+  }
+
+  async function loadExitTickets() {
+    exitTicketsLoading = true;
+    exitTicketsError = '';
+    const textId = $page.params.id;
+
+    if (!textId) {
+      exitTicketsError = 'Reading text ID is missing';
+      exitTicketsLoading = false;
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/exercises?readingTextId=${textId}`, {
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        exitTickets = data.exercises || [];
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        exitTicketsError = errorData.error || 'Failed to load exit tickets';
+      }
+    } catch (err) {
+      console.error('Error loading exit tickets:', err);
+      exitTicketsError = 'Failed to load exit tickets';
+    } finally {
+      exitTicketsLoading = false;
+    }
+  }
+
+  function initReadingTimer(durationSeconds: number) {
+    timerDurationSeconds = durationSeconds || 0;
+
+    if (!timerDurationSeconds) {
+      timerRemainingSeconds = 0;
+      timerActive = false;
+      timerFinished = true;
+      clearTimerInterval();
+      return;
+    }
+
+    if (typeof window === 'undefined') {
+      timerRemainingSeconds = 0;
+      timerActive = false;
+      timerFinished = true;
+      return;
+    }
+
+    const key = `reading-text-timer-${$page.params.id}`;
+    const now = Date.now();
+    let timerState: { end: number; duration: number } | null = null;
+
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        timerState = JSON.parse(raw);
+      }
+    } catch (err) {
+      console.error('Failed to read timer state:', err);
+    }
+
+    if (!timerState || timerState.duration !== timerDurationSeconds || timerState.end <= now) {
+      timerState = {
+        end: now + timerDurationSeconds * 1000,
+        duration: timerDurationSeconds
+      };
+      localStorage.setItem(key, JSON.stringify(timerState));
+    }
+
+    setupTimerInterval(timerState.end);
+  }
+
+  function setupTimerInterval(endTimestamp: number) {
+    updateTimerState(endTimestamp);
+    clearTimerInterval();
+    timerInterval = window.setInterval(() => {
+      updateTimerState(endTimestamp);
+    }, 1000);
+  }
+
+  function updateTimerState(endTimestamp: number) {
+    const now = Date.now();
+    const remainingMs = endTimestamp - now;
+    const remainingSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+    timerRemainingSeconds = remainingSeconds;
+    timerActive = remainingSeconds > 0;
+    timerFinished = remainingSeconds <= 0;
+
+    if (timerFinished) {
+      clearTimerInterval();
+    }
+  }
+
+  function clearTimerInterval() {
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+  }
+
+  function formatDuration(seconds: number) {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+
+  function handleExitTicketClick(ticketId: string) {
+    if (!exitTicketsUnlocked) return;
+    goto(`/exercises/${ticketId}`);
   }
 
   function handleTextSelection() {
@@ -705,12 +837,12 @@
       if (!selected) return;
 
       const searchLower = selected.toLowerCase();
-
-      const walker = document.createTreeWalker(
-        contentDiv,
-        NodeFilter.SHOW_TEXT
-      );
-
+        
+        const walker = document.createTreeWalker(
+          contentDiv,
+          NodeFilter.SHOW_TEXT
+        );
+        
       let node: Node | null;
       let found = false;
 
@@ -725,7 +857,7 @@
             const range = document.createRange();
             range.setStart(textNode, idx);
             range.setEnd(textNode, idx + selected.length);
-
+            
             const span = document.createElement('span');
             span.className = 'annotation-marker';
             span.style.cssText = `
@@ -739,7 +871,7 @@
             `;
             span.title = 'Annotation: ' + (annotation.content ?? '');
             span.onclick = () => openChatModal(annotation);
-
+            
             range.surroundContents(span);
             found = true;
           } catch (e) {
@@ -982,6 +1114,69 @@
               </div>
             {/if}
           </div>
+          <div class="card p-6 mt-6 space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-lg font-semibold text-gray-900">Exit Tickets</h3>
+                {#if timerDurationSeconds > 0}
+                  <p class="text-xs text-gray-500">
+                    {timerFinished
+                      ? 'Timer complete — exit tickets unlocked'
+                      : `Timer unlocks in ${formatDuration(timerRemainingSeconds)}`}
+                  </p>
+                {:else}
+                  <p class="text-xs text-gray-500">Exit tickets are available immediately.</p>
+                {/if}
+              </div>
+              {#if timerDurationSeconds > 0}
+                <span
+                  class={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
+                    timerFinished ? 'bg-emerald-100 text-emerald-800' : 'bg-yellow-100 text-yellow-800'
+                  }`}
+                >
+                  {timerFinished ? 'Unlocked' : 'Locked'}
+                </span>
+              {/if}
+            </div>
+
+            {#if exitTicketsLoading}
+              <div class="text-center py-6">
+                <div class="animate-spin rounded-full h-6 w-6 border-2 border-primary-600 border-t-transparent mx-auto"></div>
+                <p class="text-xs text-gray-500 mt-2">Loading exit tickets...</p>
+              </div>
+            {:else if exitTicketsError}
+              <Alert type="error" message={exitTicketsError} />
+            {:else if exitTickets.length > 0}
+              <div class="space-y-3">
+                {#each exitTickets as ticket}
+                  <div class="flex items-center justify-between border border-gray-200 rounded-lg p-3 bg-white">
+                    <div class="flex-1 pr-4">
+                      <p class="text-sm font-medium text-gray-900">{ticket.title}</p>
+                      <p class="text-xs text-gray-500 truncate">{ticket.description || 'No description'}</p>
+                      {#if ticket.dueDate}
+                        <p class="text-[10px] text-gray-500 mt-1">
+                          Due {new Date(ticket.dueDate).toLocaleDateString()}
+                        </p>
+                      {/if}
+                    </div>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={!exitTicketsUnlocked}
+                      on:click={() => handleExitTicketClick(ticket.id)}
+                      title={!exitTicketsUnlocked ? 'Wait for the timer to finish before starting exit tickets' : ''}
+                    >
+                      {exitTicketsUnlocked ? 'Start Exit Ticket' : 'Locked'}
+                    </Button>
+                  </div>
+                {/each}
+              </div>
+            {:else}
+              <p class="text-xs text-gray-500 text-center py-6">
+                No exit tickets are linked to this reading text yet.
+              </p>
+            {/if}
+          </div>
         </div>
     </div>
   </main>
@@ -997,6 +1192,8 @@
       on:click={closeChatModal}
       on:keydown={(e) => e.key === 'Escape' && closeChatModal()}
     >
+      <!-- svelte-ignore a11y-click-events-have-key-events -->
+      <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
       <div 
         class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col"
         role="document"
