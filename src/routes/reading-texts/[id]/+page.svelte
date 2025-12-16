@@ -1291,7 +1291,14 @@
               {#if audioUploading}
                 Uploading...
               {:else}
-                Voice
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M12 1.75a3 3 0 00-3 3v6.5a3 3 0 106 0v-6.5a3 3 0 00-3-3zm0 0v0M6.75 10.25v1a5.25 5.25 0 0010.5 0v-1M12 18.75v3.5m0 0h-3m3 0h3"
+                  />
+                </svg>
               {/if}
             </button>
             <button
