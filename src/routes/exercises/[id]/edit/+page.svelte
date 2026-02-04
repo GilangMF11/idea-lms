@@ -42,7 +42,7 @@
   async function loadExercise() {
     try {
       loading = true;
-      const response = await fetch(`/api/exercises/${$page.params.id}`, {
+      const response = await fetch(`/api/submissions/${$page.params.id}`, {
         headers: {
           'Authorization': `Bearer ${$authStore.token}`,
           'Content-Type': 'application/json'
@@ -122,7 +122,7 @@
         exercise = data.exercise;
         
         // Navigate to view page
-        goto(`/exercises/${$page.params.id}`);
+        goto(`/submissions/${$page.params.id}`);
       } else {
         const errorData = await response.json();
         error = errorData.error || 'Failed to update exercise';
@@ -136,7 +136,7 @@
   }
 
   function cancel() {
-    goto(`/exercises/${$page.params.id}`);
+    goto(`/submissions/${$page.params.id}`);
   }
 
   function goBack() {

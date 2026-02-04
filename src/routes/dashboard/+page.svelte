@@ -610,7 +610,7 @@
             <button
               type="button"
               class="w-full flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors text-left"
-              on:click={() => goto(`/exercises/${exercise.id}`)}
+              on:click={() => goto(`/submissions/${exercise.id}`)}
             >
               <div class="flex-1">
                 <p class="text-sm font-medium text-gray-900">{exercise.title}</p>

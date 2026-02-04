@@ -759,31 +759,62 @@
     <!-- Class Info -->
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
       <div class="bg-white rounded-lg shadow p-4 sm:p-6 mb-4 sm:mb-6">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
+          <!-- Class Information -->
           <div>
-            <h3 class="text-base sm:text-lg font-medium text-gray-900 mb-2">Class Information</h3>
-            <div class="space-y-2 text-sm">
-              <p class="break-words"><span class="font-medium">Name:</span> {classData.name}</p>
-              <p><span class="font-medium">Code:</span> <code class="bg-gray-100 px-2 py-1 rounded text-xs">{classData.code}</code></p>
-              <p class="break-words"><span class="font-medium">Description:</span> {classData.description || 'No description'}</p>
-              <p><span class="font-medium">Status:</span> 
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                  Active
-                </span>
-              </p>
-            </div>
+            <h3 class="text-base sm:text-lg font-semibold text-gray-900 mb-4">Class Information</h3>
+            <dl class="divide-y divide-gray-100">
+              <div class="grid grid-cols-[minmax(0,7.5rem)_1fr] gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+                <dt class="text-sm font-medium text-gray-500">Name</dt>
+                <dd class="text-sm text-gray-900 break-words">{classData.name}</dd>
+              </div>
+              <div class="grid grid-cols-[minmax(0,7.5rem)_1fr] gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+                <dt class="text-sm font-medium text-gray-500">Code</dt>
+                <dd class="text-sm"><code class="bg-gray-100 px-2 py-0.5 rounded text-gray-900 font-medium">{classData.code}</code></dd>
+              </div>
+              <div class="grid grid-cols-[minmax(0,7.5rem)_1fr] gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+                <dt class="text-sm font-medium text-gray-500">Description</dt>
+                <dd class="text-sm text-gray-900 break-words">{classData.description || 'No description'}</dd>
+              </div>
+              <div class="grid grid-cols-[minmax(0,7.5rem)_1fr] gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+                <dt class="text-sm font-medium text-gray-500">Created</dt>
+                <dd class="text-sm text-gray-900">{new Date(classData.createdAt).toLocaleDateString()}</dd>
+              </div>
+              <div class="grid grid-cols-[minmax(0,7.5rem)_1fr] gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+                <dt class="text-sm font-medium text-gray-500">Status</dt>
+                <dd class="text-sm">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {classData.isActive !== false ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                    {classData.isActive !== false ? 'Active' : 'Inactive'}
+                  </span>
+                </dd>
+              </div>
+            </dl>
           </div>
+          <!-- Statistics -->
           <div>
-            <h3 class="text-base sm:text-lg font-medium text-gray-900 mb-2">Statistics</h3>
-            <div class="space-y-2 text-sm">
-              <p><span class="font-medium">Students:</span> {students.length}</p>
-              <p><span class="font-medium">Exit Tickets:</span> {exercises.length}</p>
-              <p><span class="font-medium">Reading Texts:</span> {readingTexts.length}</p>
-              <p><span class="font-medium">Created:</span> {new Date(classData.createdAt).toLocaleDateString()}</p>
-            </div>
+            <h3 class="text-base sm:text-lg font-semibold text-gray-900 mb-4">Statistics</h3>
+            <dl class="divide-y divide-gray-100">
+              <div class="grid grid-cols-[minmax(0,7.5rem)_1fr] gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+                <dt class="text-sm font-medium text-gray-500">Students</dt>
+                <dd class="text-sm font-semibold text-gray-900">{students.length}</dd>
+              </div>
+              <div class="grid grid-cols-[minmax(0,7.5rem)_1fr] gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+                <dt class="text-sm font-medium text-gray-500">Exit Tickets</dt>
+                <dd class="text-sm font-semibold text-gray-900">{exercises.length}</dd>
+              </div>
+              <div class="grid grid-cols-[minmax(0,7.5rem)_1fr] gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+                <dt class="text-sm font-medium text-gray-500">Reading Texts</dt>
+                <dd class="text-sm font-semibold text-gray-900">{readingTexts.length}</dd>
+              </div>
+              <div class="grid grid-cols-[minmax(0,7.5rem)_1fr] gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+                <dt class="text-sm font-medium text-gray-500">Groups</dt>
+                <dd class="text-sm font-semibold text-gray-900">{groups.length}</dd>
+              </div>
+            </dl>
           </div>
+          <!-- Quick Actions -->
           <div>
-            <h3 class="text-base sm:text-lg font-medium text-gray-900 mb-2">Quick Actions</h3>
+            <h3 class="text-base sm:text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
             <div class="space-y-2">
               <Button variant="primary" size="sm" fullWidth on:click={addStudent}>
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

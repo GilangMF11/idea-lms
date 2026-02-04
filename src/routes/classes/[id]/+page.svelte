@@ -166,7 +166,7 @@
     }
 
     // If no timer restriction or timer is finished, proceed to exercise
-    goto(`/exercises/${exercise.id}`);
+    goto(`/submissions/${exercise.id}`);
   }
 
   function closeReadingTextDialog() {
@@ -415,64 +415,63 @@
     <!-- Class Information -->
     <div class="card p-6">
       <h3 class="text-lg font-semibold text-gray-900 mb-4">Class Information</h3>
-      <div class="space-y-4">
-        <div>
-          <div class="text-sm font-medium text-gray-500">Class Name</div>
-          <p class="text-sm text-gray-900">{classData.name}</p>
+      <dl class="divide-y divide-gray-100">
+        <div class="grid grid-cols-[minmax(0,7.5rem)_1fr] gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+          <dt class="text-sm font-medium text-gray-500">Class Name</dt>
+          <dd class="text-sm text-gray-900">{classData.name}</dd>
         </div>
-        <div>
-          <div class="text-sm font-medium text-gray-500">Description</div>
-          <p class="text-sm text-gray-900">{classData.description || 'No description provided'}</p>
+        <div class="grid grid-cols-[minmax(0,7.5rem)_1fr] gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+          <dt class="text-sm font-medium text-gray-500">Class Code</dt>
+          <dd class="text-sm font-semibold text-gray-900">{classData.code}</dd>
         </div>
-        <div>
-          <div class="text-sm font-medium text-gray-500">Teacher</div>
-          <p class="text-sm text-gray-900">{classData.teacher?.firstName} {classData.teacher?.lastName}</p>
+        <div class="grid grid-cols-[minmax(0,7.5rem)_1fr] gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+          <dt class="text-sm font-medium text-gray-500">Description</dt>
+          <dd class="text-sm text-gray-900">{classData.description || 'No description provided'}</dd>
         </div>
-        <div>
-          <div class="text-sm font-medium text-gray-500">Created</div>
-          <p class="text-sm text-gray-900">{new Date(classData.createdAt).toLocaleDateString()}</p>
+        <div class="grid grid-cols-[minmax(0,7.5rem)_1fr] gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+          <dt class="text-sm font-medium text-gray-500">Teacher</dt>
+          <dd class="text-sm text-gray-900">{classData.teacher?.firstName} {classData.teacher?.lastName}</dd>
         </div>
-        <div>
-          <div class="text-sm font-medium text-gray-500">Status</div>
-          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-            Active
-          </span>
+        <div class="grid grid-cols-[minmax(0,7.5rem)_1fr] gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+          <dt class="text-sm font-medium text-gray-500">Created</dt>
+          <dd class="text-sm text-gray-900">{new Date(classData.createdAt).toLocaleDateString()}</dd>
         </div>
-      </div>
+        <div class="grid grid-cols-[minmax(0,7.5rem)_1fr] gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+          <dt class="text-sm font-medium text-gray-500">Last Updated</dt>
+          <dd class="text-sm text-gray-900">{classData.updatedAt ? new Date(classData.updatedAt).toLocaleDateString() : '—'}</dd>
+        </div>
+        <div class="grid grid-cols-[minmax(0,7.5rem)_1fr] gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+          <dt class="text-sm font-medium text-gray-500">Status</dt>
+          <dd class="text-sm">
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {classData.isActive !== false ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+              {classData.isActive !== false ? 'Active' : 'Inactive'}
+            </span>
+          </dd>
+        </div>
+      </dl>
     </div>
 
-    <!-- Class Information -->
+    <!-- Statistics -->
     <div class="card p-6">
-      <h3 class="text-lg font-semibold text-gray-900 mb-4">Class Information</h3>
-      <div class="space-y-4">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <div class="text-sm font-medium text-gray-500">Class Code</div>
-            <p class="text-lg font-semibold text-gray-900">{classData.code}</p>
-          </div>
-          <div>
-            <div class="text-sm font-medium text-gray-500">Status</div>
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {classData.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
-              {classData.isActive ? 'Active' : 'Inactive'}
-            </span>
-          </div>
-          <div>
-            <div class="text-sm font-medium text-gray-500">Created</div>
-            <p class="text-sm text-gray-900">{new Date(classData.createdAt).toLocaleDateString()}</p>
-          </div>
-          <div>
-            <div class="text-sm font-medium text-gray-500">Last Updated</div>
-            <p class="text-sm text-gray-900">{new Date(classData.updatedAt).toLocaleDateString()}</p>
-          </div>
+      <h3 class="text-lg font-semibold text-gray-900 mb-4">Statistics</h3>
+      <dl class="divide-y divide-gray-100">
+        <div class="grid grid-cols-[minmax(0,7.5rem)_1fr] gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+          <dt class="text-sm font-medium text-gray-500">Students</dt>
+          <dd class="text-sm font-semibold text-gray-900">{students.length}</dd>
         </div>
-        
-        {#if classData.description}
-          <div>
-            <div class="text-sm font-medium text-gray-500">Description</div>
-            <p class="text-sm text-gray-900 mt-1">{classData.description}</p>
-          </div>
-        {/if}
-      </div>
+        <div class="grid grid-cols-[minmax(0,7.5rem)_1fr] gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+          <dt class="text-sm font-medium text-gray-500">Reading Texts</dt>
+          <dd class="text-sm font-semibold text-gray-900">{readingTexts.length}</dd>
+        </div>
+        <div class="grid grid-cols-[minmax(0,7.5rem)_1fr] gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+          <dt class="text-sm font-medium text-gray-500">Exit Tickets</dt>
+          <dd class="text-sm font-semibold text-gray-900">{exercises.length}</dd>
+        </div>
+        <div class="grid grid-cols-[minmax(0,7.5rem)_1fr] gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+          <dt class="text-sm font-medium text-gray-500">Completion Rate</dt>
+          <dd class="text-sm text-gray-900">—</dd>
+        </div>
+      </dl>
     </div>
 
     <!-- Quick Actions -->
@@ -654,7 +653,7 @@
                   <Button variant="secondary" size="sm" on:click={() => goto(`/exercises/${exercise.id}/edit`)}>
                     Edit
                   </Button>
-                  <Button variant="primary" size="sm" on:click={() => goto(`/exercises/${exercise.id}`)}>
+                  <Button variant="primary" size="sm" on:click={() => goto(`/submissions/${exercise.id}`)}>
                     View
                   </Button>
                 </div>

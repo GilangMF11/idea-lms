@@ -241,7 +241,7 @@
 
   function handleExitTicketClick(ticketId: string) {
     if (!exitTicketsUnlocked) return;
-    goto(`/exercises/${ticketId}`);
+    goto(`/submissions/${ticketId}`);
   }
 
   function handleTextSelection() {
