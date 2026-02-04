@@ -32,6 +32,8 @@
   let audioUploading = false;
   let audioError = '';
   let audioInput: HTMLInputElement;
+  let aiError = '';
+  let ideaTagActive = false;
   let exitTickets: any[] = [];
   let exitTicketsLoading = false;
   let exitTicketsError = '';
@@ -370,7 +372,12 @@
       if (response.ok) {
         const data = await response.json();
         console.log('Chat messages loaded:', data);
-        chatMessages = data.messages || [];
+        const serverMessages = data.messages || [];
+        // Pertahankan pesan lokal dari IDEA AI yang tidak disimpan di server
+        const localAIMessages = chatMessages.filter(
+          (m) => m && m.userId === 'idea-ai'
+        );
+        chatMessages = [...serverMessages, ...localAIMessages];
       } else {
         const errorData = await response.json();
         console.error('Error loading chat messages:', errorData);
@@ -471,6 +478,10 @@
     try {
       chatLoading = true;
       chatError = '';
+      aiError = '';
+
+      const messageContent = newMessage.trim();
+      const containsIdeaAITag = /@IDEA\s*AI\b/i.test(messageContent);
       
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -480,7 +491,7 @@
         },
         body: JSON.stringify({
           classId: readingText?.classId,
-          content: newMessage.trim(),
+          content: messageContent,
           type: 'TEXT',
           annotationId: selectedAnnotationForChat.id
         })
@@ -491,6 +502,11 @@
         // Tambah pesan ke daftar saat ini (optimistic update)
         chatMessages = [...chatMessages, data.message];
         newMessage = '';
+
+        // Jika ada tag @IDEA AI, trigger AI assistant (maks 3x per readingText per siswa)
+        if (containsIdeaAITag) {
+          await triggerIdeaAI(messageContent);
+        }
       } else {
         chatError = 'Failed to send message';
       }
@@ -499,6 +515,61 @@
       chatError = 'Failed to send message';
     } finally {
       chatLoading = false;
+    }
+  }
+
+  async function triggerIdeaAI(originalMessage: string) {
+    if (!selectedAnnotationForChat || !readingText) return;
+
+    try {
+      // Jangan reset chatLoading di sini (sudah diatur di sendMessage),
+      // cukup tambahkan sedikit delay visual jika perlu.
+      const payload = {
+        question: originalMessage,
+        classId: readingText.classId,
+        readingTextId: readingText.id,
+        annotationId: selectedAnnotationForChat.id
+      };
+
+      const response = await fetch('/api/ai/idea', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const msg =
+          errorData.error ||
+          (response.status === 429
+            ? 'AI assistance limit reached for this reading text.'
+            : 'Failed to get AI response');
+        aiError = msg;
+        chatError = msg;
+        return;
+      }
+
+      const data = await response.json();
+      console.log('IDEA AI response meta:', {
+        answerPreview: String(data.answer || '').slice(0, 80),
+        remainingGlobal: data.remaining,
+        remainingForReadingText: data.readingTextRemaining,
+        perReadingTextLimit: data.perReadingTextLimit,
+        globalLimit: data.limit
+      });
+
+      // Pesan AI yang sudah disimpan di server (ChatMessage)
+      if (data.message) {
+        chatMessages = [...chatMessages, data.message];
+      }
+    } catch (err) {
+      console.error('Error getting AI response:', err);
+      const msg = 'Failed to get AI response';
+      aiError = msg;
+      chatError = msg;
     }
   }
 
@@ -882,6 +953,28 @@
     });
   }
 
+  // Format konten chat: highlight mention @IDEA AI dengan warna biru
+  function formatChatContent(text: string) {
+    if (!text) return '';
+
+    // Escape HTML dasar
+    const escaped = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+    // Ganti @IDEA AI (case-insensitive) jadi span biru
+    return escaped.replace(
+      /@IDEA\s*AI\b/gi,
+      '<span class="text-blue-600 font-semibold">@IDEA AI</span>'
+    );
+  }
+
+  // Reactive: cek apakah user sedang mengetik tag @IDEA AI
+  $: ideaTagActive = /@IDEA\s*AI\b/i.test(newMessage || '');
+
   // Reactive statement to highlight when annotations change
   $: if (readingText && annotations.length > 0) {
     setTimeout(highlightAnnotatedText, 100);
@@ -1259,7 +1352,9 @@
                         Your browser does not support the audio element.
                       </audio>
                     {:else}
-                      <p class="text-sm break-words">{message.content}</p>
+                      <p class="text-sm break-words">
+                        {@html formatChatContent(message.content || '')}
+                      </p>
                     {/if}
                   </div>
                 </div>
@@ -1272,6 +1367,18 @@
         <div class="p-4 border-t border-gray-200 space-y-2">
           {#if audioError}
             <div class="text-xs text-red-600 mb-1">{audioError}</div>
+          {/if}
+          {#if aiError}
+            <div class="text-xs text-red-600 mb-1">{aiError}</div>
+          {/if}
+          {#if ideaTagActive}
+            <div class="text-xs text-blue-600 mb-1 flex items-center space-x-1">
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200">
+                <span class="w-1.5 h-1.5 rounded-full bg-blue-500 mr-1"></span>
+                <span class="font-semibold">@IDEA AI</span>
+              </span>
+              <span>will be asked for this message</span>
+            </div>
           {/if}
           <div class="flex space-x-2">
             <input

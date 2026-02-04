@@ -14,6 +14,18 @@
   let totalUsers = 0;
   let loading = true;
   let error = '';
+  let classSearchQuery = '';
+
+  $: filteredClasses = classSearchQuery.trim() === ''
+    ? classes
+    : classes.filter(
+        (c) =>
+          (c.name || '').toLowerCase().includes(classSearchQuery.trim().toLowerCase()) ||
+          (c.description || '').toLowerCase().includes(classSearchQuery.trim().toLowerCase()) ||
+          (c.code || '').toLowerCase().includes(classSearchQuery.trim().toLowerCase())
+      );
+  $: displayedClasses = filteredClasses.slice(0, 3);
+  $: hasMoreClasses = filteredClasses.length > 3;
   
   onMount(async () => {
     authStore.init();
@@ -515,33 +527,57 @@
 
   <!-- Main Content Grid -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-    <!-- My Classes -->
+    <!-- My Classes (Student) -->
     <div class="card p-6">
-      <h3 class="text-lg font-semibold text-gray-900 mb-4">My Classes</h3>
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+        <h3 class="text-lg font-semibold text-gray-900">My Classes</h3>
+        {#if hasMoreClasses}
+          <Button variant="secondary" size="sm" on:click={() => goto('/my-classes')}>
+            View all classes
+          </Button>
+        {/if}
+      </div>
       {#if classes.length > 0}
-        <div class="space-y-3">
-          {#each classes as classItem (classItem.id)}
+        <div class="mb-4">
+          <label for="student-class-search" class="sr-only">Search classes</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </span>
+            <input
+              id="student-class-search"
+              type="text"
+              bind:value={classSearchQuery}
+              placeholder="Search classes..."
+              class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500"
+            />
+          </div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          {#each displayedClasses as classItem (classItem.id)}
             <button
               type="button"
-              class="w-full flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
-              on:click={() => {
-                if (classItem?.id) {
-                  goto(`/classes/${classItem.id}`);
-                } else {
-                  console.error('Class ID tidak ditemukan:', classItem);
-                }
-              }}
+              class="block w-full text-left overflow-hidden rounded-xl border border-gray-200 bg-white hover:border-primary-300 hover:shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+              on:click={() => classItem?.id && goto(`/classes/${classItem.id}`)}
             >
-              <div class="flex-1">
-                <p class="text-sm font-medium text-gray-900">{classItem.name || 'Unnamed Class'}</p>
-                <p class="text-xs text-gray-500">{classItem.description || 'No description'}</p>
+              <div class="h-28 bg-primary-100 flex items-center justify-center">
+                <svg class="w-12 h-12 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
               </div>
-              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800 ml-3">
-                Active
-              </span>
+              <div class="p-5 text-center">
+                <p class="font-semibold text-gray-900 truncate w-full">{classItem.name || 'Unnamed Class'}</p>
+                <p class="text-sm text-gray-500 mt-1 line-clamp-2">{classItem.description || 'No description'}</p>
+                <span class="inline-flex items-center mt-2 px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800">Active</span>
+              </div>
             </button>
           {/each}
         </div>
+        {#if filteredClasses.length === 0}
+          <p class="text-sm text-gray-500 mt-2">No classes match your search.</p>
+        {/if}
       {:else}
         <div class="text-center py-8">
           <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -560,7 +596,14 @@
 
     <!-- Recent Exit Tickets -->
     <div class="card p-6">
-      <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Exit Tickets</h3>
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+        <h3 class="text-lg font-semibold text-gray-900">Recent Exit Tickets</h3>
+        {#if exercises.length > 3}
+          <Button variant="secondary" size="sm" on:click={() => goto('/exit-tickets')}>
+            Show all
+          </Button>
+        {/if}
+      </div>
       {#if exercises.length > 0}
         <div class="space-y-3">
           {#each exercises.slice(0, 3) as exercise}
@@ -602,7 +645,7 @@
           </svg>
           Browse Classes
         </Button>
-        <Button variant="secondary" size="md" fullWidth on:click={() => goto('/assignments')}>
+        <Button variant="secondary" size="md" fullWidth on:click={() => goto('/exit-tickets')}>
           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
@@ -682,28 +725,56 @@
 
   <!-- Main Content Grid -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-    <!-- My Classes -->
+    <!-- My Classes (Teacher) -->
     <div class="card p-6">
-      <h3 class="text-lg font-semibold text-gray-900 mb-4">My Classes</h3>
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+        <h3 class="text-lg font-semibold text-gray-900">My Classes</h3>
+        {#if hasMoreClasses}
+          <Button variant="secondary" size="sm" on:click={() => goto('/my-classes')}>
+            View all classes
+          </Button>
+        {/if}
+      </div>
       {#if classes.length > 0}
-        <div class="space-y-3">
-          {#each classes as classItem}
-            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-              <div>
-                <p class="text-sm font-medium text-gray-900">{classItem.name}</p>
-                <p class="text-xs text-gray-500">{classItem._count?.students || 0} students</p>
+        <div class="mb-4">
+          <label for="teacher-class-search" class="sr-only">Search classes</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </span>
+            <input
+              id="teacher-class-search"
+              type="text"
+              bind:value={classSearchQuery}
+              placeholder="Search classes..."
+              class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-primary-500 focus:border-primary-500"
+            />
+          </div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          {#each displayedClasses as classItem (classItem.id)}
+            <button
+              type="button"
+              class="block w-full text-left overflow-hidden rounded-xl border border-gray-200 bg-white hover:border-primary-300 hover:shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 cursor-pointer"
+              on:click={() => goto(`/classes/${classItem.id}/manage`)}
+            >
+              <div class="h-28 bg-primary-100 flex items-center justify-center">
+                <svg class="w-12 h-12 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
               </div>
-              <div class="flex space-x-2">
-                <Button variant="secondary" size="sm" on:click={() => goto(`/classes/${classItem.id}/manage`)}>
-                  Manage
-                </Button>
-                <Button variant="primary" size="sm" on:click={() => goto(`/classes/${classItem.id}`)}>
-                  View
-                </Button>
+              <div class="p-5 text-center">
+                <p class="font-semibold text-gray-900 truncate w-full">{classItem.name || 'Unnamed Class'}</p>
+                <p class="text-sm text-gray-500 mt-1">{classItem._count?.students ?? 0} students</p>
               </div>
-            </div>
+            </button>
           {/each}
         </div>
+        {#if filteredClasses.length === 0}
+          <p class="text-sm text-gray-500 mt-2">No classes match your search.</p>
+        {/if}
       {:else}
         <div class="text-center py-8">
           <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
