@@ -5,6 +5,7 @@
   import { authStore } from '$lib/stores/auth.js';
   import Button from '$lib/components/Button.svelte';
   import Alert from '$lib/components/Alert.svelte';
+  import PdfViewer from '$lib/components/PdfViewer.svelte';
 
   let readingText: any = null;
   let annotations: any[] = [];
@@ -19,7 +20,14 @@
   let editAnnotationText = '';
   let showDeleteAnnotationModal = false;
   let annotationToDelete: any = null;
-  
+  // PDF annotation (when content is PDF)
+  let showPdfAnnotationModal = false;
+  let pdfAnnotationPage = 1;
+  let pdfAnnotationContent = '';
+  let pdfAnnotationSelectedText = '';
+  let pdfAnnotationStartPos = 0;
+  let pdfAnnotationEndPos = 0;
+
   // Chat functionality
   let showChatModal = false;
   let selectedAnnotationForChat: any = null;
@@ -801,7 +809,8 @@
       annotationError = '';
 
       const position = getSelectionPosition();
-      
+      const isPdf = !!(readingText?.pdfUrl);
+
       const response = await fetch('/api/annotations', {
         method: 'POST',
         headers: {
@@ -812,10 +821,11 @@
           readingTextId: $page.params.id,
           classId: readingText?.classId,
           content: annotationText,
-          selectedText: selectedText,
-          startPos: position?.startOffset || 0,
-          endPos: position?.endOffset || 0,
-          color: '#fef3c7' // Default yellow color
+          selectedText: selectedText || null,
+          startPos: position?.startOffset ?? 0,
+          endPos: position?.endOffset ?? 0,
+          pageIndex: isPdf ? null : undefined,
+          color: '#fef3c7'
         })
       });
 
@@ -829,6 +839,63 @@
       }
     } catch (err) {
       console.error('Error creating annotation:', err);
+      annotationError = 'Failed to create annotation';
+    } finally {
+      annotationLoading = false;
+    }
+  }
+
+  function openPdfAnnotationFromSelection(selectedText: string, pageNum: number, startOffset: number = 0, endOffset: number = 0) {
+    pdfAnnotationSelectedText = selectedText;
+    pdfAnnotationPage = pageNum;
+    pdfAnnotationStartPos = startOffset;
+    pdfAnnotationEndPos = endOffset;
+    pdfAnnotationContent = '';
+    annotationError = '';
+    showPdfAnnotationModal = true;
+    window.getSelection()?.removeAllRanges();
+  }
+
+  async function createPdfAnnotation() {
+    if (!pdfAnnotationContent.trim()) {
+      annotationError = 'Please enter your note';
+      return;
+    }
+    const pageIndex = Math.max(0, Math.floor(Number(pdfAnnotationPage)) || 1) - 1;
+    try {
+      annotationLoading = true;
+      annotationError = '';
+      const response = await fetch('/api/annotations', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          readingTextId: $page.params.id,
+          classId: readingText?.classId,
+          content: pdfAnnotationContent.trim(),
+          selectedText: pdfAnnotationSelectedText || null,
+          startPos: pdfAnnotationStartPos,
+          endPos: pdfAnnotationEndPos,
+          pageIndex,
+          color: '#fef3c7'
+        })
+      });
+      if (response.ok) {
+        await loadAnnotations();
+        showPdfAnnotationModal = false;
+        pdfAnnotationContent = '';
+        pdfAnnotationSelectedText = '';
+        pdfAnnotationStartPos = 0;
+        pdfAnnotationEndPos = 0;
+        pdfAnnotationPage = 1;
+      } else {
+        const result = await response.json();
+        annotationError = result.error || 'Failed to create annotation';
+      }
+    } catch (err) {
+      console.error('Error creating PDF annotation:', err);
       annotationError = 'Failed to create annotation';
     } finally {
       annotationLoading = false;
@@ -1057,41 +1124,70 @@
         <!-- Reading Text -->
         <div class="lg:col-span-2">
           <div class="card p-8">
-            <div class="prose prose-lg max-w-none">
-              <div 
-                class="text-gray-900 leading-relaxed select-text cursor-text reading-content"
-                role="textbox"
-                tabindex="0"
-                on:click={handleTextSelection}
-                on:mouseup={handleTextSelection}
-                on:touchend={(e) => {
-                  // Beri waktu sedikit agar selection dari sentuhan selesai
-                  setTimeout(() => {
-                    handleTextSelection();
-                  }, 0);
-                }}
-                on:keydown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleTextSelection();
-                  }
-                }}
-              >
-                {@html readingText.content}
+            {#if readingText.pdfUrl}
+              <!-- PDF viewer: select text to add annotation; highlights persist after refresh -->
+              <div class="space-y-2">
+                <p class="text-sm text-gray-500">Select text in the PDF to add an annotation. Highlights are saved and remain after refresh.</p>
+                <PdfViewer
+                  pdfUrl={readingText.pdfUrl}
+                  annotations={annotations}
+                  onTextSelection={openPdfAnnotationFromSelection}
+                  onAnnotationClick={(id) => {
+                    const ann = annotations.find((a) => a.id === id);
+                    if (ann) openChatModal(ann);
+                  }}
+                />
               </div>
-            </div>
+            {:else}
+              <div class="prose prose-lg max-w-none">
+                <div 
+                  class="text-gray-900 leading-relaxed select-text cursor-text reading-content"
+                  role="textbox"
+                  tabindex="0"
+                  on:click={handleTextSelection}
+                  on:mouseup={handleTextSelection}
+                  on:touchend={(e) => {
+                    setTimeout(() => {
+                      handleTextSelection();
+                    }, 0);
+                  }}
+                  on:keydown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleTextSelection();
+                    }
+                  }}
+                >
+                  {@html readingText.content || ''}
+                </div>
+              </div>
+            {/if}
           </div>
         </div>
 
         <!-- Annotations Sidebar -->
         <div class="lg:col-span-1">
           <div class="card p-6">
-            <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center justify-between mb-4">
               <h3 class="text-lg font-semibold text-gray-900">Annotations</h3>
               <span class="bg-primary-100 text-primary-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
                 {annotations.length}
               </span>
             </div>
+            {#if readingText?.pdfUrl}
+              <Button
+                variant="primary"
+                size="sm"
+                fullWidth
+                class="mb-4"
+                on:click={() => { showPdfAnnotationModal = true; annotationError = ''; }}
+              >
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                Add annotation
+              </Button>
+            {/if}
 
             {#if annotations.length > 0}
               <div class="space-y-4 max-h-96 overflow-y-auto">
@@ -1113,6 +1209,9 @@
                           </p>
                           <p class="text-xs text-gray-500">
                             {new Date(annotation.createdAt).toLocaleDateString()}
+                            {#if annotation.pageIndex != null}
+                              · Page {annotation.pageIndex + 1}
+                            {/if}
                           </p>
                         </div>
                       </div>
@@ -1502,6 +1601,76 @@
               </svg>
             {/if}
             {annotationLoading ? 'Adding...' : 'Add Annotation'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- PDF Annotation Modal (for PDF reading texts) -->
+{#if showPdfAnnotationModal}
+  <div
+    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    role="dialog"
+    aria-modal="true"
+    tabindex="-1"
+  >
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+      <div class="p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold text-gray-900">Add annotation (PDF)</h3>
+          <button
+            class="text-gray-400 hover:text-gray-600"
+            on:click={() => { showPdfAnnotationModal = false; annotationError = ''; pdfAnnotationSelectedText = ''; }}
+            aria-label="Close"
+          >
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        {#if pdfAnnotationSelectedText}
+          <div class="mb-4 p-3 bg-orange-50 border-l-4 border-orange-400 rounded">
+            <div class="text-sm font-medium text-orange-800 mb-1">Selected text</div>
+            <div class="text-sm text-orange-700 italic">"{pdfAnnotationSelectedText}"</div>
+          </div>
+        {/if}
+        <div class="mb-4">
+          <label for="pdf-annotation-page" class="block text-sm font-medium text-gray-700 mb-2">Page number</label>
+          <input
+            id="pdf-annotation-page"
+            type="number"
+            min="1"
+            bind:value={pdfAnnotationPage}
+            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500"
+          />
+        </div>
+        <div class="mb-4">
+          <label for="pdf-annotation-content" class="block text-sm font-medium text-gray-700 mb-2">Your note</label>
+          <textarea
+            id="pdf-annotation-content"
+            bind:value={pdfAnnotationContent}
+            rows="4"
+            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500"
+            placeholder="Add a note or highlight for this page..."
+          ></textarea>
+        </div>
+        {#if annotationError}
+          <Alert type="error" message={annotationError} />
+        {/if}
+        <div class="flex justify-end space-x-3">
+          <Button variant="secondary" on:click={() => { showPdfAnnotationModal = false; annotationError = ''; pdfAnnotationSelectedText = ''; }} disabled={annotationLoading}>
+            Cancel
+          </Button>
+          <Button variant="primary" on:click={createPdfAnnotation} disabled={annotationLoading || !pdfAnnotationContent.trim()}>
+            {#if annotationLoading}
+              <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            {/if}
+            {annotationLoading ? 'Adding...' : 'Add annotation'}
           </Button>
         </div>
       </div>

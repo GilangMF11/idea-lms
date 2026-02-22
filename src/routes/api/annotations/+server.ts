@@ -70,10 +70,10 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
     }
 
     const body = await request.json();
-    const { readingTextId, classId, content, selectedText, startPos, endPos, color } = body;
+    const { readingTextId, classId, content, selectedText, startPos, endPos, color, pageIndex } = body;
 
-    if (!readingTextId || !classId || !content || startPos === undefined || endPos === undefined) {
-      return json({ error: 'Reading text ID, class ID, content, start position, and end position are required' }, { status: 400 });
+    if (!readingTextId || !classId || !content) {
+      return json({ error: 'Reading text ID, class ID, and content are required' }, { status: 400 });
     }
 
     // Verify reading text exists
@@ -92,8 +92,9 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
         classId,
         content,
         selectedText: selectedText || null,
-        startPos,
-        endPos,
+        startPos: startPos !== undefined ? Number(startPos) : 0,
+        endPos: endPos !== undefined ? Number(endPos) : 0,
+        pageIndex: pageIndex !== undefined && pageIndex !== null ? Number(pageIndex) : null,
         color: color || null
       } as any,
       include: {

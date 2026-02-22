@@ -23,6 +23,10 @@
   let showImageUpload = false;
   let imageUploadLoading = false;
   let imageUploadError = '';
+  let pdfUrl = '';
+  let pdfUploading = false;
+  let pdfUploadError = '';
+  let pdfInput: HTMLInputElement;
 
   onMount(() => {
     if (!$authStore.isAuthenticated || !['TEACHER', 'ADMIN'].includes($authStore.user?.role || '')) {
@@ -109,6 +113,47 @@
     contentBlocks = contentBlocks.filter((_, i) => i !== index);
   }
 
+  async function handlePdfUpload(event: Event) {
+    const target = event.target as HTMLInputElement;
+    const file = target.files?.[0];
+    if (!file) return;
+    if (file.type !== 'application/pdf') {
+      pdfUploadError = 'Please select a PDF file';
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      pdfUploadError = 'PDF must be less than 15MB';
+      return;
+    }
+    try {
+      pdfUploading = true;
+      pdfUploadError = '';
+      const formData = new FormData();
+      formData.append('pdf', file);
+      const response = await fetch('/api/upload/pdf', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${$authStore.token}` },
+        body: formData
+      });
+      if (response.ok) {
+        const data = await response.json();
+        pdfUrl = data.url;
+      } else {
+        const data = await response.json();
+        pdfUploadError = data.error || 'Failed to upload PDF';
+      }
+    } catch (err) {
+      console.error('PDF upload error:', err);
+      pdfUploadError = 'Failed to upload PDF';
+    } finally {
+      pdfUploading = false;
+      target.value = '';
+    }
+  }
+
+  function clearPdf() {
+    pdfUrl = '';
+  }
 
   async function handleImageUpload(event: Event) {
     const target = event.target as HTMLInputElement;
@@ -184,34 +229,29 @@
       timerSeconds = parsedMinutes * 60;
     }
 
-    console.log('Validating content blocks:', contentBlocks);
-    if (contentBlocks.length === 0 || contentBlocks.every(block => {
-      if (block.type === 'text') return !block.content.trim();
-      if (block.type === 'image') return !block.url.trim();
-      return true;
-    })) {
-      error = 'Please add some content';
-      console.log('Validation failed - no content');
+    const hasPdf = pdfUrl.trim().length > 0;
+    const hasContent = contentBlocks.length > 0 && contentBlocks.some(block => {
+      if (block.type === 'text') return !!block.content.trim();
+      if (block.type === 'image') return !!block.url.trim();
+      return false;
+    });
+    if (!hasPdf && !hasContent) {
+      error = 'Please upload a PDF or add some content';
       return;
     }
-    console.log('Validation passed');
 
     try {
       loading = true;
       error = '';
 
-      // Convert content blocks to HTML
-      console.log('Content blocks:', contentBlocks);
       const htmlContent = contentBlocks.map(block => {
         if (block.type === 'text') {
-          return `<p>${block.content.replace(/\n/g, '<br>')}</p>`;
+          return `<p>${(block.content || '').replace(/\n/g, '<br>')}</p>`;
         } else if (block.type === 'image') {
           return `<figure><img src="${block.url}" alt="${block.caption}" style="max-width: 100%; height: auto;"><figcaption>${block.caption}</figcaption></figure>`;
         }
         return '';
       }).join('');
-      
-      console.log('Generated HTML:', htmlContent);
 
       const response = await fetch('/api/reading-texts', {
         method: 'POST',
@@ -222,6 +262,7 @@
         body: JSON.stringify({
           title,
           content: htmlContent,
+          pdfUrl: pdfUrl.trim() || null,
           author: author || null,
           source: source || null,
           classId,
@@ -378,7 +419,30 @@
         <div>
           <div class="flex justify-between items-center mb-4">
             <div class="block text-sm font-medium text-gray-700">Content</div>
-            <div class="flex space-x-2">
+            <div class="flex flex-wrap gap-2">
+              <input
+                type="file"
+                accept="application/pdf"
+                class="hidden"
+                bind:this={pdfInput}
+                on:change={handlePdfUpload}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={pdfUploading}
+                on:click={() => pdfInput?.click()}
+              >
+                {#if pdfUploading}
+                  <span class="animate-spin mr-2">⏳</span>
+                {:else}
+                  <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                {/if}
+                {pdfUploading ? 'Uploading...' : 'Upload PDF'}
+              </Button>
               <Button type="button" variant="secondary" size="sm" on:click={addTextBlock}>
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" />
@@ -393,6 +457,24 @@
               </Button>
             </div>
           </div>
+
+          {#if pdfUploadError}
+            <p class="text-sm text-red-600 mb-2">{pdfUploadError}</p>
+          {/if}
+          {#if pdfUrl}
+            <div class="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-between">
+              <div class="flex items-center">
+                <svg class="w-8 h-8 text-red-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+                <div>
+                  <p class="text-sm font-medium text-gray-900">PDF attached</p>
+                  <p class="text-xs text-gray-500 truncate max-w-xs">{pdfUrl}</p>
+                </div>
+              </div>
+              <button type="button" class="text-red-600 hover:text-red-800 text-sm" on:click={clearPdf}>Remove</button>
+            </div>
+          {/if}
 
           <div class="space-y-4">
             {#each contentBlocks as block, index}

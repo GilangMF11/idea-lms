@@ -21,6 +21,11 @@
   let showImageUpload = false;
   let imageUploadLoading = false;
   let imageUploadError = '';
+  // PDF upload
+  let pdfUrl = '';
+  let pdfUploading = false;
+  let pdfUploadError = '';
+  let pdfInput: HTMLInputElement;
 
   function parseHTMLToBlocks(htmlContent: string) {
     const blocks: any[] = [];
@@ -100,9 +105,13 @@
         author = readingText.author || '';
         source = readingText.source || '';
         classId = readingText.classId;
+        pdfUrl = readingText.pdfUrl || '';
         
-        // Parse HTML content back to blocks
-        contentBlocks = parseHTMLToBlocks(readingText.content);
+        // Parse HTML content back to blocks (skip if PDF-only)
+        contentBlocks = readingText.pdfUrl ? [] : parseHTMLToBlocks(readingText.content || '');
+        if (contentBlocks.length === 0 && !readingText.pdfUrl) {
+          contentBlocks = [{ type: 'text', content: '' }];
+        }
       } else {
         error = 'Failed to load reading text';
       }
@@ -138,6 +147,48 @@
 
   function addImageBlock() {
     contentBlocks = [...contentBlocks, { type: 'image', url: '', caption: '' }];
+  }
+
+  async function handlePdfUpload(event: Event) {
+    const target = event.target as HTMLInputElement;
+    const file = target.files?.[0];
+    if (!file) return;
+    if (file.type !== 'application/pdf') {
+      pdfUploadError = 'Please select a PDF file';
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      pdfUploadError = 'PDF must be less than 15MB';
+      return;
+    }
+    try {
+      pdfUploading = true;
+      pdfUploadError = '';
+      const formData = new FormData();
+      formData.append('pdf', file);
+      const response = await fetch('/api/upload/pdf', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${$authStore.token}` },
+        body: formData
+      });
+      if (response.ok) {
+        const data = await response.json();
+        pdfUrl = data.url;
+      } else {
+        const data = await response.json();
+        pdfUploadError = data.error || 'Failed to upload PDF';
+      }
+    } catch (err) {
+      console.error('PDF upload error:', err);
+      pdfUploadError = 'Failed to upload PDF';
+    } finally {
+      pdfUploading = false;
+      target.value = '';
+    }
+  }
+
+  function clearPdf() {
+    pdfUrl = '';
   }
 
   function removeBlock(index: number) {
@@ -205,7 +256,8 @@
       return;
     }
 
-    // Validate content blocks
+    // Validate: need either PDF or content blocks
+    const hasPdf = pdfUrl.trim().length > 0;
     const hasContent = contentBlocks.some(block => {
       if (block.type === 'text') {
         return block.content.trim();
@@ -215,8 +267,8 @@
       return false;
     });
 
-    if (!hasContent) {
-      error = 'Please add some content';
+    if (!hasPdf && !hasContent) {
+      error = 'Please upload a PDF or add some content';
       return;
     }
 
@@ -247,6 +299,7 @@
           id: readingText.id,
           title,
           content: htmlContent,
+          pdfUrl: pdfUrl.trim() || null,
           author: author || null,
           source: source || null,
           classId
@@ -317,17 +370,22 @@
             required
           />
           
-          <FormField
-            label="Class"
-            type="select"
-            bind:value={classId}
-            required
-          >
-            <option value="">Select a class</option>
-            {#each classes as cls}
-              <option value={cls.id}>{cls.name}</option>
-            {/each}
-          </FormField>
+          <div>
+            <label for="class-select" class="block text-sm font-medium text-gray-700">
+              Class <span class="text-red-500">*</span>
+            </label>
+            <select
+              id="class-select"
+              bind:value={classId}
+              required
+              class="input-field mt-1 block w-full"
+            >
+              <option value="">Select a class</option>
+              {#each classes as cls}
+                <option value={cls.id}>{cls.name}</option>
+              {/each}
+            </select>
+          </div>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -350,7 +408,30 @@
         <div class="mb-6">
           <div class="flex justify-between items-center mb-4">
             <div class="text-sm font-medium text-gray-700">Content</div>
-            <div class="flex space-x-2">
+            <div class="flex flex-wrap gap-2">
+              <input
+                type="file"
+                accept="application/pdf"
+                class="hidden"
+                bind:this={pdfInput}
+                on:change={handlePdfUpload}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={pdfUploading}
+                on:click={() => pdfInput?.click()}
+              >
+                {#if pdfUploading}
+                  <span class="animate-spin mr-2">⏳</span>
+                {:else}
+                  <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                {/if}
+                {pdfUploading ? 'Uploading...' : 'Upload PDF'}
+              </Button>
               <Button type="button" variant="secondary" size="sm" on:click={addTextBlock}>
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" />
@@ -366,6 +447,24 @@
             </div>
           </div>
 
+          {#if pdfUploadError}
+            <p class="text-sm text-red-600 mb-2">{pdfUploadError}</p>
+          {/if}
+          {#if pdfUrl}
+            <div class="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-between">
+              <div class="flex items-center">
+                <svg class="w-8 h-8 text-red-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+                <div>
+                  <p class="text-sm font-medium text-gray-900">PDF attached</p>
+                  <p class="text-xs text-gray-500 truncate max-w-xs">{pdfUrl}</p>
+                </div>
+              </div>
+              <button type="button" class="text-red-600 hover:text-red-800 text-sm" on:click={clearPdf}>Remove</button>
+            </div>
+          {/if}
+
           <div class="space-y-4">
             {#each contentBlocks as block, index}
               <div class="border border-gray-200 rounded-lg p-4">
@@ -376,6 +475,7 @@
                       type="button"
                       class="text-red-600 hover:text-red-800"
                       on:click={() => removeBlock(index)}
+                      aria-label="Remove text block"
                     >
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -395,6 +495,7 @@
                       type="button"
                       class="text-red-600 hover:text-red-800"
                       on:click={() => removeBlock(index)}
+                      aria-label="Remove image block"
                     >
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -427,8 +528,9 @@
                           type="button"
                           variant="secondary"
                           size="sm"
-                          on:click={() => {
-                            const fileInput = e.target?.querySelector('input[type="file"]') as HTMLInputElement;
+                          on:click={(ev) => {
+                            const btn = ev.currentTarget as HTMLElement;
+                            const fileInput = btn.previousElementSibling as HTMLInputElement | null;
                             fileInput?.click();
                           }}
                           disabled={imageUploadLoading}

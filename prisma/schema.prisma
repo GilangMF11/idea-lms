@@ -150,7 +150,8 @@ model GroupMember {
 model ReadingText {
   id        String   @id @default(cuid())
   title     String
-  content   String
+  content   String   @default("") // HTML or empty when using PDF
+  pdfUrl    String?  // Optional: when set, display PDF instead of content; annotations work on PDF
   classId   String
   groupId   String?  // Optional - untuk reading text yang dikelompokkan
   timerDuration Int? // Countdown timer in seconds (optional)
@@ -177,8 +178,9 @@ model Annotation {
   classId       String
   content       String
   selectedText  String?  // Text that was selected/highlighted
-  startPos      Int
-  endPos        Int
+  startPos      Int      @default(0)
+  endPos        Int      @default(0)
+  pageIndex     Int?     // For PDF: 0-based page number
   color         String?
   isPublic      Boolean  @default(true)
   createdAt     DateTime @default(now())

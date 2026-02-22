@@ -280,7 +280,7 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
       return json({ error: 'Only teachers can create reading texts' }, { status: 403 });
     }
 
-    const { title, content, author, source, classId, groupId, isActive = true, timerDuration } = await request.json();
+    const { title, content, author, source, classId, groupId, isActive = true, timerDuration, pdfUrl } = await request.json();
 
     const normalizedTimerDuration =
       timerDuration !== undefined && timerDuration !== null && timerDuration !== ''
@@ -294,8 +294,12 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
       return json({ error: 'Timer duration must be a non-negative number' }, { status: 400 });
     }
 
-    if (!title || !content || !classId) {
-      return json({ error: 'Title, content, and Class ID are required' }, { status: 400 });
+    if (!title || !classId) {
+      return json({ error: 'Title and Class ID are required' }, { status: 400 });
+    }
+    const hasContent = (content && String(content).trim()) || (pdfUrl && String(pdfUrl).trim());
+    if (!hasContent) {
+      return json({ error: 'Either content or PDF (pdfUrl) is required' }, { status: 400 });
     }
 
     // Check if class exists and user is the teacher
@@ -329,7 +333,8 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
     const readingText = await prisma.readingText.create({
       data: {
         title,
-        content,
+        content: (content && String(content).trim()) ? content : '',
+        pdfUrl: (pdfUrl && String(pdfUrl).trim()) ? pdfUrl : null,
         author: author || null,
         source: source || null,
         classId,
@@ -367,7 +372,7 @@ export const PUT: RequestHandler = async ({ request }: { request: any }) => {
       return json({ error: 'Only teachers can update reading texts' }, { status: 403 });
     }
 
-    const { id, title, content, author, source, groupId, isActive, timerDuration } = await request.json();
+    const { id, title, content, author, source, groupId, isActive, timerDuration, pdfUrl } = await request.json();
 
     const normalizedTimerDuration =
       timerDuration !== undefined && timerDuration !== null && timerDuration !== ''
@@ -420,20 +425,24 @@ export const PUT: RequestHandler = async ({ request }: { request: any }) => {
     }
 
     // Update reading text
+    const updateData: any = {
+      title: title || existingReadingText.title,
+      content: content !== undefined ? (content || '') : existingReadingText.content,
+      groupId: groupId !== undefined ? (groupId || null) : existingReadingText.groupId,
+      author: author !== undefined ? author : existingReadingText.author,
+      source: source !== undefined ? source : existingReadingText.source,
+      isActive: isActive !== undefined ? isActive : existingReadingText.isActive,
+      timerDuration:
+        timerDuration !== undefined
+          ? normalizedTimerDuration
+          : existingReadingText.timerDuration
+    };
+    if (pdfUrl !== undefined) {
+      updateData.pdfUrl = (pdfUrl && String(pdfUrl).trim()) ? pdfUrl : null;
+    }
     const readingText = await prisma.readingText.update({
       where: { id },
-      data: {
-        title: title || existingReadingText.title,
-        content: content || existingReadingText.content,
-        groupId: groupId !== undefined ? (groupId || null) : existingReadingText.groupId,
-        author: author !== undefined ? author : existingReadingText.author,
-        source: source !== undefined ? source : existingReadingText.source,
-        isActive: isActive !== undefined ? isActive : existingReadingText.isActive,
-        timerDuration:
-          timerDuration !== undefined
-            ? normalizedTimerDuration
-            : existingReadingText.timerDuration
-      },
+      data: updateData,
       include: {
         class: {
           select: {
