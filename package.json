@@ -14,7 +14,8 @@
 		"db:setup": "tsx scripts/setup-db.ts",
 		"db:generate": "npx prisma generate",
 		"db:push": "npx prisma db push",
-		"db:studio": "npx prisma studio"
+		"db:studio": "npx prisma studio",
+		"mcp": "tsx scripts/mcp.ts"
 	},
 	"files": [
 		"dist",
@@ -37,6 +38,7 @@
 		"svelte": "^5.0.0"
 	},
 	"dependencies": {
+		"@modelcontextprotocol/sdk": "^1.27.1",
 		"@prisma/client": "^5.22.0",
 		"bcryptjs": "^2.4.3",
 		"jsonwebtoken": "^9.0.2",

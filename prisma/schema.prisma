@@ -200,6 +200,13 @@ enum ChatMessageType {
   AUDIO
 }
 
+enum ChatType {
+  ASKING_QUESTION
+  ANSWERING_QUESTION
+  GIVING_NEW_IDEA
+  DISPUTING_IDEAS
+}
+
 model ChatMessage {
   id            String          @id @default(cuid())
   classId       String
@@ -209,6 +216,7 @@ model ChatMessage {
   audioUrl      String?
   audioDuration Int?
   annotationId  String?  // Optional - untuk discussion annotation
+  chatType      ChatType? @default(ASKING_QUESTION) // Type of discussion message
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

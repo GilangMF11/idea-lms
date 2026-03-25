@@ -3,6 +3,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { authStore } from '$lib/stores/auth.js';
+  import { chatTypeOptions, getChatTypeBadgeBg, getChatTypeBadgeText } from '$lib/config/chatTypes';
   import Button from '$lib/components/Button.svelte';
   import Alert from '$lib/components/Alert.svelte';
   import PdfViewer from '$lib/components/PdfViewer.svelte';
@@ -24,15 +25,15 @@
   let showPdfAnnotationModal = false;
   let pdfAnnotationPage = 1;
   let pdfAnnotationContent = '';
-  let pdfAnnotationSelectedText = '';
-  let pdfAnnotationStartPos = 0;
-  let pdfAnnotationEndPos = 0;
+  let pdfStartPos = 0;
+  let pdfEndPos = 0;
 
   // Chat functionality
   let showChatModal = false;
   let selectedAnnotationForChat: any = null;
   let chatMessages: any[] = [];
   let newMessage = '';
+  let selectedChatType = 'ASKING_QUESTION';
   let chatLoading = false;
   let chatError = '';
   let chatSocket: WebSocket | null = null;
@@ -501,7 +502,8 @@
           classId: readingText?.classId,
           content: messageContent,
           type: 'TEXT',
-          annotationId: selectedAnnotationForChat.id
+          annotationId: selectedAnnotationForChat.id,
+          chatType: selectedChatType
         })
       });
       
@@ -622,7 +624,8 @@
           classId: readingText?.classId,
           type: 'AUDIO',
           audioUrl,
-          annotationId: selectedAnnotationForChat.id
+          annotationId: selectedAnnotationForChat.id,
+          chatType: selectedChatType
         })
       });
 
@@ -822,9 +825,9 @@
           classId: readingText?.classId,
           content: annotationText,
           selectedText: selectedText || null,
-          startPos: position?.startOffset ?? 0,
-          endPos: position?.endOffset ?? 0,
-          pageIndex: isPdf ? null : undefined,
+          startPos: isPdf ? pdfStartPos : (position?.startOffset ?? 0),
+          endPos: isPdf ? pdfEndPos : (position?.endOffset ?? 0),
+          pageIndex: isPdf ? pdfAnnotationPage - 1 : undefined,
           color: '#fef3c7'
         })
       });
@@ -845,15 +848,10 @@
     }
   }
 
-  function openPdfAnnotationFromSelection(selectedText: string, pageNum: number, startOffset: number = 0, endOffset: number = 0) {
-    pdfAnnotationSelectedText = selectedText;
-    pdfAnnotationPage = pageNum;
-    pdfAnnotationStartPos = startOffset;
-    pdfAnnotationEndPos = endOffset;
+  function openPdfAnnotationModal() {
     pdfAnnotationContent = '';
     annotationError = '';
     showPdfAnnotationModal = true;
-    window.getSelection()?.removeAllRanges();
   }
 
   async function createPdfAnnotation() {
@@ -875,9 +873,6 @@
           readingTextId: $page.params.id,
           classId: readingText?.classId,
           content: pdfAnnotationContent.trim(),
-          selectedText: pdfAnnotationSelectedText || null,
-          startPos: pdfAnnotationStartPos,
-          endPos: pdfAnnotationEndPos,
           pageIndex,
           color: '#fef3c7'
         })
@@ -886,9 +881,6 @@
         await loadAnnotations();
         showPdfAnnotationModal = false;
         pdfAnnotationContent = '';
-        pdfAnnotationSelectedText = '';
-        pdfAnnotationStartPos = 0;
-        pdfAnnotationEndPos = 0;
         pdfAnnotationPage = 1;
       } else {
         const result = await response.json();
@@ -1131,10 +1123,20 @@
                 <PdfViewer
                   pdfUrl={readingText.pdfUrl}
                   annotations={annotations}
-                  onTextSelection={openPdfAnnotationFromSelection}
                   onAnnotationClick={(id) => {
                     const ann = annotations.find((a) => a.id === id);
                     if (ann) openChatModal(ann);
+                  }}
+                  onTextSelection={(text, pageIndex, startPos, endPos) => {
+                    selectedText = text;
+                    pdfAnnotationPage = pageIndex + 1;
+                    pdfStartPos = startPos;
+                    pdfEndPos = endPos;
+                    if (text) {
+                      showAnnotationModal = true;
+                      annotationText = '';
+                      annotationError = '';
+                    }
                   }}
                 />
               </div>
@@ -1180,7 +1182,7 @@
                 size="sm"
                 fullWidth
                 class="mb-4"
-                on:click={() => { showPdfAnnotationModal = true; annotationError = ''; }}
+                on:click={openPdfAnnotationModal}
               >
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -1441,6 +1443,13 @@
                     <span class="text-xs text-gray-500">{message.user.firstName} {message.user.lastName}</span>
                     <span class="text-xs text-gray-400 ml-2">{new Date(message.createdAt).toLocaleTimeString()}</span>
                   </div>
+                  {#if message.chatType}
+                    <div class="mb-1 {message.userId === $authStore.user?.id ? 'text-right' : 'text-left'}">
+                      <span class="inline-block px-2 py-0.5 text-xs rounded-full {getChatTypeBadgeBg(message.chatType)} {getChatTypeBadgeText(message.chatType)}">
+                        {chatTypeOptions.find(opt => opt.value === message.chatType)?.label || message.chatType}
+                      </span>
+                    </div>
+                  {/if}
                   <div class="px-4 py-2 rounded-lg {message.userId === $authStore.user?.id ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-900'}">
                     {#if message.type === 'AUDIO' && message.audioUrl}
                       <audio
@@ -1479,6 +1488,28 @@
               <span>will be asked for this message</span>
             </div>
           {/if}
+
+          <!-- Chat Type Selector -->
+          <div class="flex flex-col space-y-2">
+            <label class="text-xs font-medium text-gray-700">Message Type:</label>
+            <div class="grid grid-cols-2 gap-2">
+              {#each chatTypeOptions as option}
+                <button
+                  type="button"
+                  class="px-3 py-2 text-sm rounded-md border transition-colors {
+                    selectedChatType === option.value
+                      ? 'bg-orange-600 text-white border-orange-600'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }"
+                  on:click={() => selectedChatType = option.value}
+                  disabled={chatLoading}
+                >
+                  {option.label}
+                </button>
+              {/each}
+            </div>
+          </div>
+
           <div class="flex space-x-2">
             <input
               type="text"
@@ -1619,7 +1650,7 @@
     <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
       <div class="p-6">
         <div class="flex items-center justify-between mb-4">
-          <h3 class="text-lg font-semibold text-gray-900">Add annotation (PDF)</h3>
+          <h3 class="text-lg font-semibold text-gray-900">Add Annotation</h3>
           <button
             class="text-gray-400 hover:text-gray-600"
             on:click={() => { showPdfAnnotationModal = false; annotationError = ''; pdfAnnotationSelectedText = ''; }}
@@ -1630,12 +1661,6 @@
             </svg>
           </button>
         </div>
-        {#if pdfAnnotationSelectedText}
-          <div class="mb-4 p-3 bg-orange-50 border-l-4 border-orange-400 rounded">
-            <div class="text-sm font-medium text-orange-800 mb-1">Selected text</div>
-            <div class="text-sm text-orange-700 italic">"{pdfAnnotationSelectedText}"</div>
-          </div>
-        {/if}
         <div class="mb-4">
           <label for="pdf-annotation-page" class="block text-sm font-medium text-gray-700 mb-2">Page number</label>
           <input
@@ -1643,24 +1668,24 @@
             type="number"
             min="1"
             bind:value={pdfAnnotationPage}
-            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500"
+            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-orange-500 focus:border-orange-500"
           />
         </div>
         <div class="mb-4">
-          <label for="pdf-annotation-content" class="block text-sm font-medium text-gray-700 mb-2">Your note</label>
+          <label for="pdf-annotation-content" class="block text-sm font-medium text-gray-700 mb-2">Your annotation</label>
           <textarea
             id="pdf-annotation-content"
             bind:value={pdfAnnotationContent}
             rows="4"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500"
-            placeholder="Add a note or highlight for this page..."
+            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-orange-500 focus:border-orange-500"
+            placeholder="Enter your annotation note..."
           ></textarea>
         </div>
         {#if annotationError}
           <Alert type="error" message={annotationError} />
         {/if}
         <div class="flex justify-end space-x-3">
-          <Button variant="secondary" on:click={() => { showPdfAnnotationModal = false; annotationError = ''; pdfAnnotationSelectedText = ''; }} disabled={annotationLoading}>
+          <Button variant="secondary" on:click={() => { showPdfAnnotationModal = false; annotationError = ''; }} disabled={annotationLoading}>
             Cancel
           </Button>
           <Button variant="primary" on:click={createPdfAnnotation} disabled={annotationLoading || !pdfAnnotationContent.trim()}>

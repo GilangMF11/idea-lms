@@ -9,6 +9,7 @@
   
   let email = '';
   let password = '';
+  let rememberMe = false;
   let error = '';
   let isLoading = false;
 
@@ -48,7 +49,7 @@
     isLoading = true;
     error = '';
     
-    const result = await authStore.login(email, password);
+    const result = await authStore.login(email, password, rememberMe);
     
     if (result.success) {
       goto('/dashboard');
@@ -123,6 +124,7 @@
             id="remember-me"
             name="remember-me"
             type="checkbox"
+            bind:checked={rememberMe}
             class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
           />
           <label for="remember-me" class="ml-2 block text-sm text-gray-700">

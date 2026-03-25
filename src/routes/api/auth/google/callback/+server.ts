@@ -1,7 +1,13 @@
 import { redirect } from '@sveltejs/kit';
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
-import { getGoogleToken, authenticateWithGoogle, generateToken, isProfileComplete } from '$lib/auth.js';
+import {
+  getGoogleToken,
+  authenticateWithGoogle,
+  generateToken,
+  isProfileComplete,
+  DEFAULT_SESSION_MAX_AGE_SECONDS
+} from '$lib/auth.js';
 import { prisma } from '$lib/database.js';
 import { config } from '$lib/config.js';
 
@@ -38,7 +44,7 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
     // Set cookie with token
     cookies.set('auth_token', token, {
       path: '/',
-      maxAge: 60 * 60 * 24 * 7, // 7 days
+      maxAge: DEFAULT_SESSION_MAX_AGE_SECONDS,
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',

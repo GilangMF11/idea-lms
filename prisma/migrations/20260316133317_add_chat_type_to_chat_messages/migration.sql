@@ -1,0 +1,5 @@
+-- CreateEnum
+CREATE TYPE "ChatType" AS ENUM ('ASKING_QUESTION', 'ANSWERING_QUESTION', 'GIVING_NEW_IDEA', 'DISPUTING_IDEAS');
+
+-- AlterTable
+ALTER TABLE "chat_messages" ADD COLUMN     "chatType" "ChatType" DEFAULT 'ASKING_QUESTION';

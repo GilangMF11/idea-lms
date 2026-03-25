@@ -4,7 +4,7 @@ import { authenticateUser, generateToken } from '$lib/auth.js';
 
 export const POST: RequestHandler = async ({ request }: { request: any }) => {
   try {
-    const { email, password } = await request.json();
+    const { email, password, rememberMe } = await request.json();
 
     if (!email || !password) {
       return json(
@@ -21,7 +21,7 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
       );
     }
 
-    const token = generateToken(user);
+    const token = generateToken(user, { rememberMe: !!rememberMe });
 
     return json({
       user,

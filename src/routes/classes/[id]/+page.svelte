@@ -9,11 +9,14 @@
   let students: any[] = [];
   let exercises: any[] = [];
   let readingTexts: any[] = [];
+  let groups: any[] = [];
+  let myGroupMemberships: any[] = [];
   let loading = true;
   let error = '';
   let activeTab = 'overview';
   let showReadingTextDialog = false;
   let blockedExercise: any = null;
+  let joinGroupLoading = false;
 
   onMount(() => {
     authStore.init();
@@ -90,6 +93,34 @@
       if (readingTextsResponse.ok) {
         const readingTextsResult = await readingTextsResponse.json();
         readingTexts = readingTextsResult.readingTexts || [];
+      }
+
+      // Load groups
+      const groupsResponse = await fetch(`/api/groups?classId=${classId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (groupsResponse.ok) {
+        const groupsResult = await groupsResponse.json();
+        groups = groupsResult.groups || [];
+      }
+
+      // Load user's group memberships
+      if ($authStore.user?.role === 'STUDENT') {
+        const membershipsResponse = await fetch(`/api/group-memberships?classId=${classId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (membershipsResponse.ok) {
+          const membershipsResult = await membershipsResponse.json();
+          myGroupMemberships = membershipsResult.memberships || [];
+        }
       }
 
     } catch (err) {
@@ -179,6 +210,39 @@
       goto(`/reading-texts/${blockedExercise.readingTextId}`);
     }
     closeReadingTextDialog();
+  }
+
+  async function handleJoinGroup(groupId: string) {
+    try {
+      joinGroupLoading = true;
+
+      const response = await fetch(`/api/groups/${groupId}/members`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({})
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        myGroupMemberships = [...myGroupMemberships, result.member];
+        alert('Successfully joined the group!');
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Failed to join group');
+      }
+    } catch (err) {
+      console.error('Error joining group:', err);
+      alert('Failed to join group');
+    } finally {
+      joinGroupLoading = false;
+    }
+  }
+
+  function isUserInGroup(groupId: string): boolean {
+    return myGroupMemberships.some(membership => membership.groupId === groupId);
   }
 </script>
 
@@ -364,6 +428,14 @@
               <span class="hidden sm:inline">Materials </span>
               <span class="text-primary-600 font-semibold">({readingTexts.length})</span>
             </button>
+            <button
+              class="py-2 px-2 sm:px-1 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap flex-shrink-0 {activeTab === 'groups' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
+              on:click={() => activeTab = 'groups'}
+            >
+              <span class="inline sm:hidden">Grp</span>
+              <span class="hidden sm:inline">Groups</span>
+              <span class="text-primary-600 font-semibold">({groups.length})</span>
+            </button>
           </nav>
         </div>
       </div>
@@ -377,6 +449,8 @@
         {@render assignmentsTab()}
       {:else if activeTab === 'materials'}
         {@render materialsTab()}
+      {:else if activeTab === 'groups'}
+        {@render groupsTab()}
       {/if}
     </main>
   </div>
@@ -684,11 +758,21 @@
 <!-- Materials Tab -->
 {#snippet materialsTab()}
   <div class="card p-6">
-    <div class="flex justify-between items-center mb-6">
-      <h3 class="text-lg font-semibold text-gray-900">Reading Materials ({readingTexts.length})</h3>
-      <div class="text-sm text-gray-500">
-        Total reading materials
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+      <div>
+        <h3 class="text-lg font-semibold text-gray-900">Reading Materials ({readingTexts.length})</h3>
+        <div class="text-sm text-gray-500">
+          Total reading materials
+        </div>
       </div>
+      {#if readingTexts.length > 0}
+        <Button variant="secondary" size="sm" on:click={() => goto(`/classes/${classData.id}/chat-statistics`)}>
+          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+          Discussion Statistics
+        </Button>
+      {/if}
     </div>
 
     {#if readingTexts.length > 0}
@@ -772,6 +856,77 @@
             </Button>
           </div>
         {/if}
+      </div>
+    {/if}
+  </div>
+{/snippet}
+
+<!-- Groups Tab -->
+{#snippet groupsTab()}
+  <div class="card p-4 sm:p-6">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+      <div>
+        <h3 class="text-lg font-semibold text-gray-900">Groups ({groups.length})</h3>
+        <p class="text-xs sm:text-sm text-gray-500 mt-1">Join a group to collaborate on assignments</p>
+      </div>
+    </div>
+
+    {#if groups.length > 0}
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {#each groups as group}
+          <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all">
+            <div class="flex items-start justify-between mb-3">
+              <div>
+                <h4 class="text-base font-semibold text-gray-900">{group.name}</h4>
+                {#if group.description}
+                  <p class="text-sm text-gray-600 mt-1">{group.description}</p>
+                {/if}
+              </div>
+              {#if isUserInGroup(group.id)}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  Joined
+                </span>
+              {/if}
+            </div>
+
+            <div class="flex items-center justify-between mt-4">
+              <div class="text-sm text-gray-500">
+                <span class="font-medium">{group._count?.members || 0}</span> members
+              </div>
+
+              {#if !isUserInGroup(group.id)}
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={joinGroupLoading}
+                  on:click={() => handleJoinGroup(group.id)}
+                >
+                  {joinGroupLoading ? 'Joining...' : 'Join Group'}
+                </Button>
+              {:else}
+                <div class="text-xs text-gray-500">
+                  You're a member of this group
+                </div>
+              {/if}
+            </div>
+
+            {#if group._count?.readingTexts > 0}
+              <div class="mt-3 pt-3 border-t border-gray-100">
+                <p class="text-xs text-gray-500">
+                  <span class="font-medium">{group._count.readingTexts}</span> reading materials assigned
+                </p>
+              </div>
+            {/if}
+          </div>
+        {/each}
+      </div>
+    {:else}
+      <div class="text-center py-12">
+        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+        </svg>
+        <h3 class="mt-2 text-sm font-medium text-gray-900">No groups yet</h3>
+        <p class="mt-1 text-sm text-gray-500">The teacher hasn't created any groups for this class yet.</p>
       </div>
     {/if}
   </div>

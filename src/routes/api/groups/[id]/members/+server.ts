@@ -3,7 +3,7 @@ import type { RequestHandler } from '@sveltejs/kit';
 import { prisma } from '$lib/database.js';
 import { verifyToken } from '$lib/auth.js';
 
-// POST - Add member to group
+// POST - Add member to group (teacher can add student, student can join themselves)
 export const POST: RequestHandler = async ({ request, params }: { request: any; params: any }) => {
   try {
     const authHeader = request.headers.get('authorization');
@@ -13,16 +13,22 @@ export const POST: RequestHandler = async ({ request, params }: { request: any; 
 
     const token = authHeader.substring(7);
     const user = verifyToken(token);
-    if (!user || !['TEACHER', 'ADMIN'].includes(user.role)) {
-      return json({ error: 'Only teachers and admins can add members to groups' }, { status: 403 });
+    if (!user) {
+      return json({ error: 'Invalid token' }, { status: 401 });
     }
 
     const groupId = params.id;
     const { studentId, role } = await request.json();
 
-    if (!studentId) {
-      return json({ error: 'Student ID is required' }, { status: 400 });
+    // Determine if user is joining themselves or teacher is adding a student
+    const isStudentJoiningThemselves = user.role === 'STUDENT' && (!studentId || studentId === user.id);
+    const isTeacherAddingStudent = ['TEACHER', 'ADMIN'].includes(user.role) && studentId;
+
+    if (!isStudentJoiningThemselves && !isTeacherAddingStudent) {
+      return json({ error: 'Students can only join themselves. Teachers must specify a studentId.' }, { status: 403 });
     }
+
+    const targetStudentId = isStudentJoiningThemselves ? user.id : studentId;
 
     // Get group and check access
     const group = await prisma.group.findUnique({
@@ -60,7 +66,7 @@ export const POST: RequestHandler = async ({ request, params }: { request: any; 
     const existingMember = await prisma.groupMember.findFirst({
       where: {
         groupId,
-        studentId
+        studentId: targetStudentId
       }
     });
 
@@ -72,7 +78,7 @@ export const POST: RequestHandler = async ({ request, params }: { request: any; 
     const member = await prisma.groupMember.create({
       data: {
         groupId,
-        studentId,
+        studentId: targetStudentId,
         role: role || null
       },
       include: {

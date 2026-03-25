@@ -5,6 +5,8 @@ import { config } from './config.js';
 // import type { User } from '@prisma/client';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-here';
+export const DEFAULT_SESSION_MAX_AGE_SECONDS = Number(process.env.SESSION_MAX_AGE_SECONDS || 60 * 60 * 12); // 12h
+export const REMEMBER_ME_MAX_AGE_SECONDS = Number(process.env.REMEMBER_ME_MAX_AGE_SECONDS || 60 * 60 * 24 * 7); // 7d
 
 export interface AuthUser {
   id: string;
@@ -42,7 +44,10 @@ export async function verifyPassword(password: string, hashedPassword: string): 
   return bcrypt.compare(password, hashedPassword);
 }
 
-export function generateToken(user: AuthUser): string {
+export function generateToken(user: AuthUser, options?: { rememberMe?: boolean }): string {
+  const expiresIn: jwt.SignOptions['expiresIn'] = options?.rememberMe
+    ? `${REMEMBER_ME_MAX_AGE_SECONDS}s`
+    : `${DEFAULT_SESSION_MAX_AGE_SECONDS}s`;
   return jwt.sign(
     {
       id: user.id,
@@ -51,7 +56,7 @@ export function generateToken(user: AuthUser): string {
       role: user.role,
     },
     JWT_SECRET,
-    { expiresIn: '7d' }
+    { expiresIn }
   );
 }
 

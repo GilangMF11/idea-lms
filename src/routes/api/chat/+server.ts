@@ -110,7 +110,7 @@ export const POST: RequestHandler = async ({ request }) => {
       return json({ error: 'Invalid token' }, { status: 401 });
     }
 
-    const { classId, content, annotationId, type = 'TEXT', audioUrl, audioDuration } = await request.json();
+    const { classId, content, annotationId, type = 'TEXT', audioUrl, audioDuration, chatType = 'ASKING_QUESTION' } = await request.json();
 
     if (!classId) {
       return json({ error: 'Class ID is required' }, { status: 400 });
@@ -162,6 +162,7 @@ export const POST: RequestHandler = async ({ request }) => {
         audioUrl: type === 'AUDIO' ? audioUrl : null,
         audioDuration: type === 'AUDIO' ? audioDuration ?? null : null,
         ...(annotationId && { annotationId }), // Include annotationId if provided
+        chatType: chatType as 'ASKING_QUESTION' | 'ANSWERING_QUESTION' | 'GIVING_NEW_IDEA' | 'DISPUTING_IDEAS',
       },
       include: {
         user: {
