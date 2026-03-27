@@ -90,6 +90,11 @@ export async function authenticateUser(email: string, password: string): Promise
     return null;
   }
 
+  // Enforce email verification
+  if (!(user as any).isEmailVerified) {
+    throw new Error('EMAIL_NOT_VERIFIED');
+  }
+
   const isValidPassword = await verifyPassword(password, user.password);
   if (!isValidPassword) {
     return null;
@@ -215,6 +220,7 @@ export async function authenticateWithGoogle(googleToken: string): Promise<AuthU
           googleId: googleUser.sub as any, // Type assertion needed until Prisma types are regenerated
           avatar: googleUser.picture,
           role: 'STUDENT',
+          isEmailVerified: true, // Google accounts are already verified
         } as any,
       });
     }

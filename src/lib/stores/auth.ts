@@ -161,10 +161,15 @@ function createAuthStore() {
           throw new Error(data.error || 'Registration failed');
         }
 
+        if (data.requireVerification) {
+          update(state => ({ ...state, isLoading: false }));
+          return { success: true, requireVerification: true, message: data.message };
+        }
+
         const { user, token } = data;
 
         // Store in localStorage
-        if (browser) {
+        if (browser && token && user) {
           localStorage.setItem('auth_token', token);
           localStorage.setItem('auth_user', JSON.stringify(user));
         }

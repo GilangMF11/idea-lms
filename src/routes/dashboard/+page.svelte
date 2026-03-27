@@ -27,59 +27,63 @@
   $: displayedClasses = filteredClasses.slice(0, 3);
   $: hasMoreClasses = filteredClasses.length > 3;
   
-  onMount(async () => {
-    authStore.init();
-    
-    // Sync auth from cookie if OAuth success
-    if ($page.url.searchParams.get('oauth_success') === 'true') {
-      try {
-        const response = await fetch('/api/auth/sync', {
-          credentials: 'include', // Important: include cookies
-        });
-        if (response.ok) {
-          const data = await response.json();
-          if (data.user && data.token) {
-            // Update auth store
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('auth_token', data.token);
-              localStorage.setItem('auth_user', JSON.stringify(data.user));
+  onMount(() => {
+    const initDashboard = async () => {
+      authStore.init();
+      
+      // Sync auth from cookie if OAuth success
+      if ($page.url.searchParams.get('oauth_success') === 'true') {
+        try {
+          const response = await fetch('/api/auth/sync', {
+            credentials: 'include', // Important: include cookies
+          });
+          if (response.ok) {
+            const data = await response.json();
+            if (data.user && data.token) {
+              // Update auth store
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('auth_token', data.token);
+                localStorage.setItem('auth_user', JSON.stringify(data.user));
+              }
+              // Re-init auth store to load from localStorage
+              authStore.init();
+              // Check if profile is complete
+              if (!data.profileComplete) {
+                goto('/complete-profile', { replaceState: true });
+                return;
+              }
+              // Profile complete: load dashboard data directly to avoid stuck loading
+              await loadDashboardData();
+              // Optionally clean up the URL (remove oauth_success) without re-running onMount
+              if (typeof window !== 'undefined') {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('oauth_success');
+                window.history.replaceState({}, '', url.toString());
+              }
+              return; // Exit early to prevent redirect to login / duplicate loading
             }
-            // Re-init auth store to load from localStorage
-            authStore.init();
-            // Check if profile is complete
-            if (!data.profileComplete) {
-              goto('/complete-profile', { replaceState: true });
-              return;
-            }
-            // Profile complete: load dashboard data directly to avoid stuck loading
-            await loadDashboardData();
-            // Optionally clean up the URL (remove oauth_success) without re-running onMount
-            if (typeof window !== 'undefined') {
-              const url = new URL(window.location.href);
-              url.searchParams.delete('oauth_success');
-              window.history.replaceState({}, '', url.toString());
-            }
-            return; // Exit early to prevent redirect to login / duplicate loading
+          } else {
+            console.error('Auth sync failed:', await response.text());
           }
-        } else {
-          console.error('Auth sync failed:', await response.text());
+        } catch (err) {
+          console.error('Auth sync error:', err);
         }
-      } catch (err) {
-        console.error('Auth sync error:', err);
       }
-    }
-    
-    // Redirect to login if not authenticated
-    if (!$authStore.isAuthenticated) {
-      goto('/login');
-      return;
-    }
+      
+      // Redirect to login if not authenticated
+      if (!$authStore.isAuthenticated) {
+        goto('/login');
+        return;
+      }
 
-    // Check if profile is complete before loading dashboard
-    await checkProfileComplete();
-    
-    // Load dashboard data based on user role
-    loadDashboardData();
+      // Check if profile is complete before loading dashboard
+      await checkProfileComplete();
+      
+      // Load dashboard data based on user role
+      loadDashboardData();
+    };
+
+    initDashboard();
     
     // Close dropdown when clicking outside
     function handleClickOutside(event: Event) {
@@ -724,9 +728,8 @@
   </div>
 
   <!-- Main Content Grid -->
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-    <!-- My Classes (Teacher) -->
-    <div class="card p-6">
+  <!-- My Classes (Teacher) -->
+  <div class="card p-6">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
         <h3 class="text-lg font-semibold text-gray-900">My Classes</h3>
         {#if hasMoreClasses}
@@ -755,21 +758,35 @@
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
           {#each displayedClasses as classItem (classItem.id)}
-            <button
-              type="button"
-              class="block w-full text-left overflow-hidden rounded-xl border border-gray-200 bg-white hover:border-primary-300 hover:shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 cursor-pointer"
-              on:click={() => goto(`/classes/${classItem.id}/manage`)}
-            >
+            <div class="block w-full overflow-hidden rounded-xl border border-gray-200 bg-white hover:border-primary-300 hover:shadow-md transition-all">
               <div class="h-28 bg-primary-100 flex items-center justify-center">
                 <svg class="w-12 h-12 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                 </svg>
               </div>
-              <div class="p-5 text-center">
-                <p class="font-semibold text-gray-900 truncate w-full">{classItem.name || 'Unnamed Class'}</p>
-                <p class="text-sm text-gray-500 mt-1">{classItem._count?.students ?? 0} students</p>
+              <div class="p-5">
+                <div class="text-center mb-3">
+                  <p class="font-semibold text-gray-900 truncate w-full">{classItem.name || 'Unnamed Class'}</p>
+                  <p class="text-sm text-gray-500 mt-1">{classItem._count?.students ?? 0} students</p>
+                </div>
+                <div class="flex gap-2">
+                  <button
+                    type="button"
+                    class="flex-1 px-3 py-2 text-sm font-medium text-primary-600 bg-primary-50 rounded-lg hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                    on:click={() => goto(`/classes/${classItem.id}/manage`)}
+                  >
+                    Manage
+                  </button>
+                  <button
+                    type="button"
+                    class="flex-1 px-3 py-2 text-sm font-medium text-purple-600 bg-purple-50 rounded-lg hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+                    on:click={() => goto(`/classes/${classItem.id}/chat-statistics`)}
+                  >
+                    Analysis
+                  </button>
+                </div>
               </div>
-            </button>
+            </div>
           {/each}
         </div>
         {#if filteredClasses.length === 0}
@@ -790,18 +807,6 @@
         </div>
       {/if}
     </div>
-
-    <!-- Recent Activity -->
-    <div class="card p-6">
-      <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
-      <div class="space-y-4">
-        <div class="flex items-center text-sm text-gray-500">
-          <div class="w-2 h-2 bg-gray-300 rounded-full mr-3"></div>
-          No recent activity
-        </div>
-      </div>
-    </div>
-  </div>
 
   <!-- Quick Actions -->
   <div class="mt-8">
@@ -899,56 +904,50 @@
   </div>
 
   <!-- Main Content Grid -->
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-    <!-- System Overview -->
-    <div class="card p-6">
-      <h3 class="text-lg font-semibold text-gray-900 mb-4">System Overview</h3>
-      <div class="space-y-4">
-        <div class="flex items-center justify-between">
-          <span class="text-sm text-gray-600">Database Status</span>
-          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-            Connected
-          </span>
-        </div>
-        <div class="flex items-center justify-between">
-          <span class="text-sm text-gray-600">API Status</span>
-          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-            Running
-          </span>
-        </div>
-        <div class="flex items-center justify-between">
-          <span class="text-sm text-gray-600">Last Backup</span>
-          <span class="text-sm text-gray-900">Never</span>
-        </div>
+  <!-- All Classes (Admin) -->
+  <div class="card p-6 mb-8">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+        <h3 class="text-lg font-semibold text-gray-900">All Classes</h3>
+        {#if classes.length > 0}
+          <Button variant="secondary" size="sm" on:click={() => goto('/classes')}>
+            View All Classes
+          </Button>
+        {/if}
       </div>
-    </div>
-
-    <!-- All Classes -->
-    <div class="card p-6">
-      <h3 class="text-lg font-semibold text-gray-900 mb-4">All Classes</h3>
       {#if classes.length > 0}
-        <div class="space-y-3">
-          {#each classes.slice(0, 5) as classItem}
-            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-              <div>
-                <p class="text-sm font-medium text-gray-900">{classItem.name}</p>
-                <p class="text-xs text-gray-500">
-                  Teacher: {classItem.teacher?.firstName} {classItem.teacher?.lastName} • 
-                  Students: {classItem._count?.students || 0}
-                </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {#each classes.slice(0, 6) as classItem}
+            <div class="block w-full overflow-hidden rounded-xl border border-gray-200 bg-white hover:border-primary-300 hover:shadow-md transition-all">
+              <div class="h-24 bg-gradient-to-br from-primary-100 to-primary-50 flex items-center justify-center">
+                <svg class="w-10 h-10 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
               </div>
-              <Button variant="primary" size="sm" on:click={() => goto(`/classes/${classItem.id}`)}>
-                View
-              </Button>
+              <div class="p-4">
+                <p class="font-semibold text-gray-900 truncate w-full">{classItem.name || 'Unnamed Class'}</p>
+                <div class="flex items-center justify-between mt-2 text-sm text-gray-500 mb-3">
+                  <span>{classItem.teacher?.firstName} {classItem.teacher?.lastName}</span>
+                  <span class="font-medium">{classItem._count?.students || 0} students</span>
+                </div>
+                <div class="flex gap-2">
+                  <button
+                    type="button"
+                    class="flex-1 px-3 py-2 text-sm font-medium text-primary-600 bg-primary-50 rounded-lg hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                    on:click={() => goto(`/classes/${classItem.id}`)}
+                  >
+                    View
+                  </button>
+                  <button
+                    type="button"
+                    class="flex-1 px-3 py-2 text-sm font-medium text-purple-600 bg-purple-50 rounded-lg hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+                    on:click={() => goto(`/classes/${classItem.id}/chat-statistics`)}
+                  >
+                    Analysis
+                  </button>
+                </div>
+              </div>
             </div>
           {/each}
-          {#if classes.length > 5}
-            <div class="text-center">
-              <Button variant="secondary" size="sm" on:click={() => goto('/classes')}>
-                View All Classes
-              </Button>
-            </div>
-          {/if}
         </div>
       {:else}
         <div class="text-center py-8">
@@ -960,18 +959,6 @@
         </div>
       {/if}
     </div>
-
-    <!-- Recent Activity -->
-    <div class="card p-6">
-      <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
-      <div class="space-y-4">
-        <div class="flex items-center text-sm text-gray-500">
-          <div class="w-2 h-2 bg-gray-300 rounded-full mr-3"></div>
-          No recent activity
-        </div>
-      </div>
-    </div>
-  </div>
 
   <!-- Quick Actions -->
   <div class="mt-8">

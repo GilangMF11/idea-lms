@@ -52,6 +52,15 @@ model User {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  
+  // Tracking fields for email verification
+  isEmailVerified         Boolean   @default(false)
+  verificationToken       String?   @unique
+  verificationTokenExpiry DateTime?
+  
+  // Tracking fields for password reset
+  resetPasswordToken      String?   @unique
+  resetPasswordExpires    DateTime?
 
   // Relations
   classesAsStudent    ClassStudent[]

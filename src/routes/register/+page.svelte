@@ -69,7 +69,11 @@
     });
     
     if (result.success) {
-      goto('/dashboard');
+      if (result.requireVerification) {
+        goto('/verify-email/pending');
+      } else {
+        goto('/dashboard');
+      }
     } else {
       error = result.error || 'Registration failed';
     }

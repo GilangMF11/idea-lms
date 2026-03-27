@@ -27,8 +27,14 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
       user,
       token,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Login error:', error);
+    if (error.message === 'EMAIL_NOT_VERIFIED') {
+      return json(
+        { error: 'Please check your email and verify your account before logging in.' },
+        { status: 403 }
+      );
+    }
     return json(
       { error: 'Internal server error' },
       { status: 500 }

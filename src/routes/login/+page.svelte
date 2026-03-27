@@ -12,6 +12,9 @@
   let rememberMe = false;
   let error = '';
   let isLoading = false;
+  let isResending = false;
+  let resendSuccess = '';
+  let showResendVerification = false;
 
   // Check for OAuth errors in URL
   $: {
@@ -48,6 +51,8 @@
     
     isLoading = true;
     error = '';
+    resendSuccess = '';
+    showResendVerification = false;
     
     const result = await authStore.login(email, password, rememberMe);
     
@@ -55,9 +60,41 @@
       goto('/dashboard');
     } else {
       error = result.error || 'Login failed';
+      if (error === 'Please check your email and verify your account before logging in.') {
+        showResendVerification = true;
+      }
     }
     
     isLoading = false;
+  }
+
+  async function handleResendVerification() {
+    if (!email) return;
+
+    isResending = true;
+    error = '';
+    resendSuccess = '';
+
+    try {
+      const response = await fetch('/api/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        resendSuccess = data.message || 'Verification email resent. Please check your inbox.';
+        showResendVerification = false;
+      } else {
+        error = data.error || 'Failed to resend verification email.';
+      }
+    } catch (err) {
+      error = 'A network error occurred while resending. Please try again.';
+    } finally {
+      isResending = false;
+    }
   }
   
   function handleKeydown(event: Event) {
@@ -91,10 +128,31 @@
       </p>
     </div>
 
+    <!-- Success Alert -->
+    {#if resendSuccess}
+      <div class="mb-6">
+        <Alert type="success" message={resendSuccess} />
+      </div>
+    {/if}
+
     <!-- Error Alert -->
     {#if error}
       <div class="mb-6">
         <Alert type="error" message={error} />
+        {#if showResendVerification}
+          <div class="mt-3">
+            <Button
+              type="button"
+              variant="secondary"
+              fullWidth
+              size="sm"
+              loading={isResending}
+              on:click={handleResendVerification}
+            >
+              Belum menerima email? Kirim Ulang
+            </Button>
+          </div>
+        {/if}
       </div>
     {/if}
 

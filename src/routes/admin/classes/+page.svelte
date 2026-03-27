@@ -14,10 +14,16 @@
 
   // Modal State
   let showCreateModal = false;
+  let showEditModal = false;
   let isCreating = false;
+  let isUpdating = false;
   let newClassName = '';
   let newClassDesc = '';
   let selectedTeacher = '';
+  let editingClassId = '';
+  let editClassName = '';
+  let editClassDesc = '';
+  let editTeacher = '';
 
   onMount(async () => {
     authStore.init();
@@ -115,6 +121,54 @@
       isCreating = false;
     }
   }
+
+  async function openEditModal(cls: any) {
+    showEditModal = true;
+    editingClassId = cls.id;
+    editClassName = cls.name;
+    editClassDesc = cls.description || '';
+    editTeacher = cls.teacherId || '';
+    if (teachers.length === 0) {
+      await fetchTeachers();
+    }
+  }
+
+  async function updateAdminClass() {
+    if (!editClassName || !editTeacher) {
+      alert('Class name and Teacher selection are required.');
+      return;
+    }
+
+    isUpdating = true;
+    error = '';
+    success = '';
+
+    try {
+      const res = await fetch(`/api/admin/classes/${editingClassId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: editClassName,
+          description: editClassDesc,
+          teacherId: editTeacher
+        })
+      });
+
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || 'Failed to update Master Class');
+
+      success = `Class "${body.class.name}" successfully updated.`;
+      showEditModal = false;
+      await fetchClasses();
+    } catch (err: any) {
+      error = err.message;
+    } finally {
+      isUpdating = false;
+    }
+  }
 </script>
 
 <svelte:head>
@@ -169,6 +223,62 @@
             Deploy Class
           </Button>
           <Button variant="secondary" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm" on:click={() => showCreateModal = false}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Edit Class Modal -->
+{#if showEditModal}
+  <div class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="edit-modal-title" role="dialog" aria-modal="true">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" on:click={() => !isUpdating && (showEditModal = false)}></div>
+      <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+      <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+        <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+          <div class="sm:flex sm:items-start">
+            <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+              <h3 class="text-lg leading-6 font-bold text-gray-900 mb-4" id="edit-modal-title">
+                Edit Master Class
+              </h3>
+
+              <div class="space-y-4">
+                <div>
+                  <label for="editClassName" class="block text-sm font-medium text-gray-700">Class Name (<span class="text-red-500">*</span>)</label>
+                  <input type="text" id="editClassName" bind:value={editClassName} class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2 border" placeholder="E.g. Advanced Academic Writing 301">
+                </div>
+
+                <div>
+                  <label for="editClassDesc" class="block text-sm font-medium text-gray-700">Description (Optional)</label>
+                  <textarea id="editClassDesc" bind:value={editClassDesc} rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2 border" placeholder="A brief overview of the curriculum..."></textarea>
+                </div>
+
+                <div>
+                  <label for="editTeacherSelect" class="block text-sm font-medium text-gray-700">Assign Lead Teacher (<span class="text-red-500">*</span>)</label>
+                  {#if fetchingTeachers}
+                    <div class="mt-1 text-sm text-gray-500 italic">Fetching active teachers securely...</div>
+                  {:else}
+                    <select id="editTeacherSelect" bind:value={editTeacher} class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2 border bg-white">
+                      <option value="" disabled>-- Verify & Select a Teacher --</option>
+                      {#each teachers as teacher}
+                        <option value={teacher.id}>{teacher.firstName} {teacher.lastName} ({teacher.username})</option>
+                      {/each}
+                    </select>
+                  {/if}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+          <Button variant="primary" loading={isUpdating} disabled={isUpdating || !editClassName || !editTeacher} class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white sm:ml-3 sm:w-auto sm:text-sm" on:click={updateAdminClass}>
+            Update Class
+          </Button>
+          <Button variant="secondary" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm" on:click={() => showEditModal = false}>
             Cancel
           </Button>
         </div>
@@ -280,9 +390,17 @@
                     </div>
                   </td>
                   <td class="whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
-                    <a href={`/admin/classes/${cls.id}/students`} class="text-primary-600 hover:text-primary-900 bg-primary-50 px-3 py-1.5 rounded-md hover:bg-primary-100 transition-colors inline-block font-semibold">
-                      Plot Students &rarr;
-                    </a>
+                    <div class="flex items-center justify-end gap-2">
+                      <button on:click={() => goto(`/classes/${cls.id}/chat-statistics`)} class="text-purple-600 hover:text-purple-900 bg-purple-50 px-3 py-1.5 rounded-md hover:bg-purple-100 transition-colors inline-block font-semibold">
+                        Analysis
+                      </button>
+                      <button on:click={() => openEditModal(cls)} class="text-blue-600 hover:text-blue-900 bg-blue-50 px-3 py-1.5 rounded-md hover:bg-blue-100 transition-colors inline-block font-semibold">
+                        Edit
+                      </button>
+                      <a href={`/admin/classes/${cls.id}/students`} class="text-primary-600 hover:text-primary-900 bg-primary-50 px-3 py-1.5 rounded-md hover:bg-primary-100 transition-colors inline-block font-semibold">
+                        Plot Students &rarr;
+                      </a>
+                    </div>
                   </td>
                 </tr>
               {/each}

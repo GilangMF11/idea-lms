@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { createUser, generateToken } from '$lib/auth.js';
 import { prisma } from '$lib/database.js';
+import { generateVerificationToken, sendVerificationEmail } from '$lib/server/email.js';
 
 export const POST: RequestHandler = async ({ request }: { request: any }) => {
   try {
@@ -59,11 +60,28 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
       city,
     });
 
-    const token = generateToken(user);
+    // Generate Verification Token
+    const vToken = generateVerificationToken();
+    const expiry = new Date();
+    expiry.setHours(expiry.getHours() + 24); // Token valid for 24 hours
 
+    // Update user with verification token
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        verificationToken: vToken,
+        verificationTokenExpiry: expiry,
+      } as any,
+    });
+
+    // Send the email
+    await sendVerificationEmail(email, vToken, firstName);
+
+    // Return success message without the login token
     return json({
-      user,
-      token,
+      message: 'Registration successful. Please check your email to verify your account.',
+      requireVerification: true,
+      user
     }, { status: 201 });
   } catch (error) {
     console.error('Registration error:', error);
