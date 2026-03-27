@@ -108,6 +108,7 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
         classes = await prisma.class.findMany({
           where: {
             teacherId: user.id,
+            isActive: true,
           },
           include: {
             students: {
@@ -135,6 +136,7 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
       } else {
         classes = await prisma.class.findMany({
           where: {
+            isActive: true,
             students: {
               some: {
                 studentId: user.id,

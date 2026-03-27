@@ -174,6 +174,8 @@
       textLayerDiv.style.position = 'absolute';
       textLayerDiv.style.left = '0';
       textLayerDiv.style.top = '0';
+      textLayerDiv.style.width = viewport.width + 'px';
+      textLayerDiv.style.height = viewport.height + 'px';
       textLayerDiv.style.overflow = 'clip';
       textLayerDiv.style.pointerEvents = 'auto';
       textLayerDiv.style.userSelect = 'text';
@@ -534,8 +536,8 @@
     const endContainer = range.endContainer;
 
     // Find the page wrapper that contains the selection
-    let startPageWrapper = startContainer.parentElement?.closest('.pdf-page-wrapper');
-    let endPageWrapper = endContainer.parentElement?.closest('.pdf-page-wrapper');
+    let startPageWrapper = startContainer.parentElement?.closest('.pdf-page-wrapper') as HTMLElement | null;
+    let endPageWrapper = endContainer.parentElement?.closest('.pdf-page-wrapper') as HTMLElement | null;
 
     if (!startPageWrapper || !endPageWrapper) return;
 
@@ -627,29 +629,71 @@
     pointer-events: none !important;
     z-index: 0;
   }
+
+  /* --- Official pdf.js textLayer styles for proper alignment --- */
   :global(.pdf-viewer .pdf-text-layer) {
+    position: absolute;
+    text-align: initial;
+    inset: 0;
+    overflow: clip;
+    opacity: 1;
+    line-height: 1;
+    -webkit-text-size-adjust: none;
+    -moz-text-size-adjust: none;
+    text-size-adjust: none;
+    forced-color-adjust: none;
+    transform-origin: 0 0;
     z-index: 1;
     pointer-events: auto;
-    line-height: 1;
-    text-rendering: geometricPrecision;
-    -webkit-text-size-adjust: none;
-    text-size-adjust: none;
+    user-select: text;
+    cursor: text;
     color: transparent;
-    position: relative;
   }
-  :global(.pdf-viewer .pdf-text-layer span:not(.pdf-annotation-marker)),
-  :global(.pdf-viewer .pdf-text-layer br) {
-    color: transparent !important;
-    -webkit-text-fill-color: transparent !important;
-    text-shadow: none !important;
-    cursor: default;
+
+  /* CSS variable based font sizing from pdf.js */
+  :global(.pdf-viewer .pdf-text-layer) {
+    --min-font-size: 1;
+    --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+    --min-font-size-inv: calc(1 / var(--min-font-size));
   }
+
+  /* Each text span is absolutely positioned by pdf.js TextLayer */
+  :global(.pdf-viewer .pdf-text-layer :is(span, br):not(.pdf-annotation-marker):not(.pdf-annotation-overlay *)) {
+    color: transparent;
+    position: absolute;
+    white-space: pre;
+    cursor: text;
+    transform-origin: 0% 0%;
+  }
+
+  /* Font size and transform via CSS variables set by pdf.js TextLayer */
+  :global(.pdf-viewer .pdf-text-layer > :not(.markedContent)),
+  :global(.pdf-viewer .pdf-text-layer .markedContent span:not(.markedContent)) {
+    z-index: 1;
+    --font-height: 0;
+    font-size: calc(var(--text-scale-factor) * var(--font-height));
+    --scale-x: 1;
+    --rotate: 0deg;
+    transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+  }
+
+  :global(.pdf-viewer .pdf-text-layer .markedContent) {
+    display: contents;
+  }
+
   :global(.pdf-viewer .pdf-text-layer ::selection) {
     background: rgba(59, 130, 246, 0.4);
   }
   :global(.pdf-viewer .pdf-text-layer ::-moz-selection) {
     background: rgba(59, 130, 246, 0.4);
   }
+  :global(.pdf-viewer .pdf-text-layer br::selection) {
+    background: transparent;
+  }
+  :global(.pdf-viewer .pdf-text-layer br::-moz-selection) {
+    background: transparent;
+  }
+
   :global(.pdf-viewer .pdf-annotation-overlay) {
     z-index: 100 !important;
     backdrop-filter: blur(2px);
@@ -668,5 +712,7 @@
     -webkit-text-fill-color: #1f2937 !important;
     cursor: pointer;
     text-shadow: none !important;
+    position: relative !important;
+    white-space: pre !important;
   }
 </style>

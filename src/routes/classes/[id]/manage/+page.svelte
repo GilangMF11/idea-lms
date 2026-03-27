@@ -178,6 +178,36 @@
     goto(`/classes/${$page.params.id}`);
   }
 
+  async function deleteClass() {
+    if (!classData) return;
+    if (!confirm(`Are you sure you want to delete class "${classData.name}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      loading = true;
+      const response = await fetch(`/api/classes/${$page.params.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        goto('/my-classes');
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to delete class: ${errorData.error}`);
+        loading = false;
+      }
+    } catch (err) {
+      console.error('Error deleting class:', err);
+      alert('Failed to delete class due to an unexpected error.');
+      loading = false;
+    }
+  }
+
   async function loadAllStudents() {
     try {
       loadingStudents = true;
@@ -741,15 +771,25 @@
                 <p class="text-xs sm:text-sm text-gray-500 truncate">{classData.name}</p>
             </div>
           </div>
-            <div class="flex-shrink-0">
+            <div class="flex flex-shrink-0 items-center gap-2">
               <Button variant="secondary" size="sm" on:click={goToView}>
-              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              </svg>
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
                 <span class="hidden sm:inline">View Class</span>
                 <span class="sm:hidden">View</span>
-            </Button>
+              </Button>
+              <button 
+                class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 shadow-sm transition-colors duration-150"
+                on:click={deleteClass}
+              >
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                <span class="hidden sm:inline">Delete Class</span>
+                <span class="sm:hidden">Delete</span>
+              </button>
             </div>
           </div>
         </div>

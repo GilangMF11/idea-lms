@@ -56,6 +56,33 @@
     }
   }
 
+  async function deleteClass(classId: string, className: string) {
+    if (!confirm(`Are you sure you want to delete class "${className}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/classes/${classId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        // Optimistically remove from list or reload
+        await loadClasses();
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to delete class: ${errorData.error}`);
+      }
+    } catch (err) {
+      console.error('Error deleting class:', err);
+      alert('Failed to delete class due to an unexpected error.');
+    }
+  }
+
   function goBack() {
     goto('/dashboard');
   }
@@ -241,7 +268,10 @@
                         <button class="text-yellow-600 hover:text-yellow-900">
                           Edit
                         </button>
-                        <button class="text-red-600 hover:text-red-900">
+                        <button 
+                          class="text-red-600 hover:text-red-900"
+                          on:click={() => deleteClass(classItem.id, classItem.name)}
+                        >
                           Delete
                         </button>
                       </div>
