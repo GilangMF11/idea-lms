@@ -21,15 +21,15 @@
     const errorParam = $page.url.searchParams.get('error');
     if (errorParam) {
       if (errorParam === 'google_auth_failed') {
-        error = 'Autentikasi Google gagal';
+        error = 'Google authentication failed';
       } else if (errorParam === 'no_code') {
-        error = 'Kode autentikasi tidak ditemukan';
+        error = 'Authentication code not found';
       } else if (errorParam === 'token_exchange_failed') {
-        error = 'Gagal menukar kode autentikasi';
+        error = 'Failed to exchange authentication code';
       } else if (errorParam === 'authentication_failed') {
-        error = 'Autentikasi gagal';
+        error = 'Authentication failed';
       } else if (errorParam === 'internal_error') {
-        error = 'Terjadi kesalahan internal';
+        error = 'An internal error occurred';
       }
     }
   }
@@ -45,7 +45,7 @@
   
   async function handleLogin() {
     if (!email || !password) {
-      error = 'Mohon lengkapi semua field';
+      error = 'Please fill in all fields';
       return;
     }
     
@@ -149,7 +149,7 @@
               loading={isResending}
               on:click={handleResendVerification}
             >
-              Belum menerima email? Kirim Ulang
+              Haven't received email? Resend
             </Button>
           </div>
         {/if}
@@ -186,13 +186,13 @@
             class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
           />
           <label for="remember-me" class="ml-2 block text-sm text-gray-700">
-            Ingat saya
+            Remember me
           </label>
         </div>
 
         <div class="text-sm">
           <a href="/forgot-password" class="font-medium text-primary-600 hover:text-primary-500">
-            Lupa password?
+            Forgot password?
           </a>
         </div>
       </div>

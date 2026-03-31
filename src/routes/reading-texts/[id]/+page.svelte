@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { authStore } from '$lib/stores/auth.js';
-  import { chatTypeOptions, getChatTypeBadgeBg, getChatTypeBadgeText } from '$lib/config/chatTypes';
+  import { chatTypeOptions, getChatTypeBadgeBg, getChatTypeBadgeText } from '$lib/config/chatTypes.js';
   import Button from '$lib/components/Button.svelte';
   import Alert from '$lib/components/Alert.svelte';
   import PdfViewer from '$lib/components/PdfViewer.svelte';
@@ -1379,7 +1379,7 @@
   <!-- Chat Modal -->
   {#if showChatModal && selectedAnnotationForChat}
     <div 
-      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 sm:p-6"
       role="dialog"
       aria-modal="true"
       tabindex="0"
@@ -1389,7 +1389,7 @@
       <!-- svelte-ignore a11y-click-events-have-key-events -->
       <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
       <div 
-        class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col"
+        class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col"
         role="document"
         on:click|stopPropagation
       >
@@ -1491,7 +1491,7 @@
 
           <!-- Chat Type Selector -->
           <div class="flex flex-col space-y-2">
-            <label class="text-xs font-medium text-gray-700">Message Type:</label>
+            <span class="text-xs font-medium text-gray-700">Message Type:</span>
             <div class="grid grid-cols-2 gap-2">
               {#each chatTypeOptions as option}
                 <button
@@ -1570,13 +1570,13 @@
 <!-- Annotation Modal -->
 {#if showAnnotationModal}
   <div 
-    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 sm:p-6"
     role="dialog"
     aria-modal="true"
     tabindex="-1"
   >
     <div 
-      class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+      class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto"
     >
       <div class="p-6">
         <div class="flex items-center justify-between mb-4">
@@ -1642,18 +1642,18 @@
 <!-- PDF Annotation Modal (for PDF reading texts) -->
 {#if showPdfAnnotationModal}
   <div
-    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 sm:p-6"
     role="dialog"
     aria-modal="true"
     tabindex="-1"
   >
-    <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
       <div class="p-6">
         <div class="flex items-center justify-between mb-4">
           <h3 class="text-lg font-semibold text-gray-900">Add Annotation</h3>
           <button
             class="text-gray-400 hover:text-gray-600"
-            on:click={() => { showPdfAnnotationModal = false; annotationError = ''; pdfAnnotationSelectedText = ''; }}
+            on:click={() => { showPdfAnnotationModal = false; annotationError = ''; selectedText = ''; }}
             aria-label="Close"
           >
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1706,11 +1706,11 @@
 <!-- Delete Annotation Confirmation Modal -->
 {#if showDeleteAnnotationModal && annotationToDelete}
   <div 
-    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 sm:p-6"
     role="dialog"
     aria-modal="true"
   >
-    <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
       <div class="p-6">
         <!-- Header -->
         <div class="flex items-center mb-4">
