@@ -43,6 +43,8 @@
   let audioInput: HTMLInputElement;
   let aiError = '';
   let ideaTagActive = false;
+  let showEmojiPicker = false;
+  let annotationExpanded = true;
   let exitTickets: any[] = [];
   let exitTicketsLoading = false;
   let exitTicketsError = '';
@@ -1417,12 +1419,24 @@
           </button>
         </div>
 
-        <!-- Annotation Content -->
-        <div class="p-4 bg-orange-50 border-b border-gray-200">
-          <div class="text-sm font-medium text-orange-800 mb-2">Selected Text:</div>
-          <div class="text-sm text-orange-700 italic mb-2">"{selectedAnnotationForChat.selectedText}"</div>
-          <div class="text-sm font-medium text-orange-800 mb-1">Annotation:</div>
-          <div class="text-sm text-orange-700">{selectedAnnotationForChat.content}</div>
+        <!-- Annotation Content (collapsible) -->
+        <div class="border-b border-gray-200 bg-orange-50">
+          <button
+            type="button"
+            class="w-full flex items-center justify-between px-4 py-2 text-sm font-medium text-orange-800 hover:bg-orange-100 transition-colors"
+            on:click={() => annotationExpanded = !annotationExpanded}
+          >
+            <span>{annotationExpanded ? '▼' : '▶'} Annotation Detail</span>
+            <span class="text-xs text-orange-600">{annotationExpanded ? 'click to collapse' : 'click to expand'}</span>
+          </button>
+          {#if annotationExpanded}
+            <div class="px-4 pb-3 max-h-40 overflow-y-auto">
+              <div class="text-sm font-medium text-orange-800 mb-1">Selected Text:</div>
+              <div class="text-sm text-orange-700 italic mb-2">"{selectedAnnotationForChat.selectedText}"</div>
+              <div class="text-sm font-medium text-orange-800 mb-1">Annotation:</div>
+              <div class="text-sm text-orange-700">{selectedAnnotationForChat.content}</div>
+            </div>
+          {/if}
         </div>
 
         <!-- Chat Messages -->
@@ -1519,6 +1533,39 @@
               on:keydown={(e) => e.key === 'Enter' && sendMessage()}
               disabled={chatLoading}
             />
+            <!-- Emoji Picker -->
+            <div class="relative">
+              <button
+                type="button"
+                class="px-3 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 border border-gray-300 text-sm disabled:opacity-50"
+                on:click={() => showEmojiPicker = !showEmojiPicker}
+                disabled={chatLoading}
+                title="Emoji"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </button>
+              {#if showEmojiPicker}
+                <div class="absolute bottom-full right-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg p-2 z-50 w-64">
+                  <div class="grid grid-cols-8 gap-1">
+                    {#each ['😀','😂','😍','🤔','👍','👎','❤️','🔥','🎉','😢','😡','😮','👏','🙌','💯','✨','🤝','💡','📚','✅','🥳','😎','🤩','💪'] as emoji}
+                      <button
+                        type="button"
+                        class="text-xl hover:bg-gray-100 rounded p-1 transition-colors"
+                        on:click={() => {
+                          newMessage += emoji;
+                          showEmojiPicker = false;
+                        }}
+                      >
+                        {emoji}
+                      </button>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+            </div>
+            <!-- Voice / Audio Upload -->
             <button
               type="button"
               class="px-3 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 border border-gray-300 text-sm disabled:opacity-50"
