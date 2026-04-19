@@ -10,6 +10,7 @@
   let showLogoutModal = false;
   let classes: any[] = [];
   let exercises: any[] = [];
+  let submissions: any[] = [];
   let readingTexts: any[] = [];
   let totalUsers = 0;
   let loading = true;
@@ -166,10 +167,26 @@
             'Content-Type': 'application/json'
           }
         });
-        
+
         if (exercisesResponse.ok) {
           const exercisesData = await exercisesResponse.json();
           exercises = exercisesData.exercises || [];
+        }
+
+        // Fetch all submissions for this student
+        try {
+          const subsResponse = await fetch('/api/exercise-submissions/all', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          if (subsResponse.ok) {
+            const subsData = await subsResponse.json();
+            submissions = subsData.submissions || [];
+          }
+        } catch (err) {
+          console.error('Error loading submissions:', err);
         }
       } else if (classes.length > 0) {
         // For teachers/admins, fetch from first class
@@ -223,7 +240,25 @@
       loading = false;
     }
   }
-  
+
+  function getExerciseStatus(exercise: any): { label: string; color: string } {
+    const sub = submissions.find((s: any) => s.exerciseId === exercise.id);
+    const isOverdue = exercise.dueDate && new Date() > new Date(exercise.dueDate);
+
+    if (sub) {
+      if (sub.score !== null) {
+        return { label: `Graded: ${sub.score}/100`, color: 'bg-green-100 text-green-800' };
+      }
+      return { label: 'Submitted', color: 'bg-blue-100 text-blue-800' };
+    }
+
+    if (isOverdue) {
+      return { label: 'Overdue', color: 'bg-red-100 text-red-800' };
+    }
+
+    return { label: 'Not Started', color: 'bg-yellow-100 text-yellow-800' };
+  }
+
   function handleLogout() {
     showLogoutModal = true;
     showUserMenu = false;
@@ -600,40 +635,41 @@
 
     <!-- Recent Exit Tickets -->
     <div class="card p-6">
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-        <h3 class="text-lg font-semibold text-gray-900">Recent Exit Tickets</h3>
+      <div class="flex items-center justify-between mb-5">
+        <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Exit Tickets</h3>
         {#if exercises.length > 3}
-          <Button variant="secondary" size="sm" on:click={() => goto('/exit-tickets')}>
-            Show all
-          </Button>
+          <button
+            type="button"
+            class="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            on:click={() => goto('/exit-tickets')}
+          >See all</button>
         {/if}
       </div>
+
       {#if exercises.length > 0}
-        <div class="space-y-3">
-          {#each exercises.slice(0, 3) as exercise}
+        <div class="space-y-1">
+          {#each exercises.slice(0, 4) as exercise}
+            {@const status = getExerciseStatus(exercise)}
             <button
               type="button"
-              class="w-full flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors text-left"
+              class="w-full flex items-center justify-between py-3 px-2 rounded-lg text-left hover:bg-gray-50 transition-colors group"
               on:click={() => goto(`/submissions/${exercise.id}`)}
             >
-              <div class="flex-1">
-                <p class="text-sm font-medium text-gray-900">{exercise.title}</p>
-                <p class="text-xs text-gray-500">{exercise.description || 'No description'}</p>
+              <div class="flex items-center gap-3 min-w-0 flex-1">
+                <div class="w-1.5 h-1.5 rounded-full flex-shrink-0 {status.label.startsWith('Graded') ? 'bg-green-500' : status.label === 'Submitted' ? 'bg-blue-500' : status.label === 'Overdue' ? 'bg-red-500' : 'bg-yellow-400'}"></div>
+                <div class="min-w-0">
+                  <p class="text-sm text-gray-800 truncate">{exercise.title}</p>
+                  <p class="text-xs text-gray-400">{exercise.class?.name || ''}{#if exercise.dueDate} &middot; {new Date(exercise.dueDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}{/if}</p>
+                </div>
               </div>
-              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 ml-3">
-                Pending
+              <span class="text-xs text-gray-400 flex-shrink-0 ml-3 {status.label.startsWith('Graded') ? '!text-green-600' : status.label === 'Submitted' ? '!text-blue-600' : status.label === 'Overdue' ? '!text-red-500' : ''}">
+                {status.label}
               </span>
             </button>
           {/each}
         </div>
       {:else}
-        <div class="text-center py-8">
-          <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <h3 class="mt-2 text-sm font-medium text-gray-900">No exit tickets yet</h3>
-          <p class="mt-1 text-sm text-gray-500">Exit tickets will appear here when your teachers post them.</p>
-        </div>
+        <p class="text-sm text-gray-400 text-center py-6">Belum ada exit ticket.</p>
       {/if}
     </div>
   </div>

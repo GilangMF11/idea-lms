@@ -37,6 +37,7 @@ export async function createReadingTextWithHistory(data: {
   title: string;
   content: string;
   classId: string;
+  lessonId: string;
   author?: string;
   source?: string;
   userId: string;

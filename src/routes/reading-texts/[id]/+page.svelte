@@ -54,8 +54,11 @@
   let timerFinished = false;
   let timerInterval: number | null = null;
   let exitTicketsUnlocked = true;
+  let scheduleError: 'not_yet_open' | 'closed' | null = null;
+  let scheduleDate: string = '';
 
   $: exitTicketsUnlocked = timerDurationSeconds === 0 || timerFinished;
+  $: timerLocked = timerDurationSeconds > 0 && timerFinished;
 
   // Highlight colors for annotated text (rotating palette)
   const annotationHighlightColors = [
@@ -109,6 +112,17 @@
         readingText = result.readingText;
         initReadingTimer(readingText?.timerDuration ?? 0);
         loadExitTickets();
+      } else if (response.status === 403 && $authStore.user?.role === 'STUDENT') {
+        const result = await response.json();
+        if (result.scheduleType === 'not_yet_open') {
+          scheduleError = 'not_yet_open';
+          scheduleDate = result.openAt;
+        } else if (result.scheduleType === 'closed') {
+          scheduleError = 'closed';
+          scheduleDate = result.closeAt;
+        } else {
+          error = result.error || 'Access denied';
+        }
       } else {
         error = 'Failed to load reading text';
       }
@@ -256,6 +270,7 @@
   }
 
   function handleTextSelection() {
+    if (timerLocked) return;
     const selection = window.getSelection();
     if (selection && selection.toString().trim()) {
       selectedText = selection.toString().trim();
@@ -484,6 +499,7 @@
   }
 
   async function sendMessage() {
+    if (timerLocked) return;
     if (!newMessage.trim() || !selectedAnnotationForChat) return;
     
     try {
@@ -1071,6 +1087,33 @@
       </div>
     </div>
   </div>
+{:else if scheduleError}
+  <div class="min-h-screen flex items-center justify-center bg-gray-50">
+    <div class="max-w-md w-full text-center">
+      <div class="mb-6">
+        {#if scheduleError === 'not_yet_open'}
+          <div class="mx-auto w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mb-4">
+            <svg class="w-8 h-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h2 class="text-xl font-semibold text-gray-900 mb-2">Material Not Yet Available</h2>
+          <p class="text-gray-600">This material is scheduled to be opened on:</p>
+          <p class="text-lg font-semibold text-primary-600 mt-2">{new Date(scheduleDate).toLocaleString('en-US', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+        {:else}
+          <div class="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
+            <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h2 class="text-xl font-semibold text-gray-900 mb-2">Material Already Closed</h2>
+          <p class="text-gray-600">Access to this material has been closed since:</p>
+          <p class="text-lg font-semibold text-red-600 mt-2">{new Date(scheduleDate).toLocaleString('en-US', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+        {/if}
+      </div>
+      <Button variant="primary" on:click={goBack}>Back</Button>
+    </div>
+  </div>
 {:else if readingText}
   <div class="min-h-screen bg-gray-50">
     <!-- Header -->
@@ -1130,6 +1173,7 @@
                     if (ann) openChatModal(ann);
                   }}
                   onTextSelection={(text, pageIndex, startPos, endPos) => {
+                    if (timerLocked) return;
                     selectedText = text;
                     pdfAnnotationPage = pageIndex + 1;
                     pdfStartPos = startPos;
@@ -1178,6 +1222,15 @@
                 {annotations.length}
               </span>
             </div>
+            
+            {#if timerLocked}
+              <div class="bg-yellow-50 border border-yellow-200 rounded-md p-3 text-sm text-yellow-700 mb-4 flex items-center">
+                <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Time is up. Cannot add or edit annotations.
+              </div>
+            {/if}
             {#if readingText?.pdfUrl}
               <Button
                 variant="primary"
@@ -1185,6 +1238,7 @@
                 fullWidth
                 class="mb-4"
                 on:click={openPdfAnnotationModal}
+                disabled={timerLocked}
               >
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -1275,12 +1329,13 @@
                             rows="3"
                             class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-sm"
                             placeholder="Enter your annotation..."
+                            disabled={timerLocked}
                           ></textarea>
                           <div class="flex space-x-2">
                             <button
                               class="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50"
                               on:click={updateAnnotation}
-                              disabled={annotationLoading || !editAnnotationText.trim()}
+                              disabled={timerLocked || annotationLoading || !editAnnotationText.trim()}
                             >
                               {annotationLoading ? 'Saving...' : 'Save'}
                             </button>
@@ -1524,6 +1579,15 @@
             </div>
           </div>
 
+          {#if timerLocked}
+            <div class="bg-yellow-50 border border-yellow-200 rounded-md p-3 text-sm text-yellow-700 mb-2 flex items-center">
+              <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Waktu pengerjaan telah habis. Discuss dan anotasi dikunci.
+            </div>
+          {/if}
+
           <div class="flex space-x-2">
             <input
               type="text"
@@ -1531,7 +1595,7 @@
               placeholder="Type your message... (emoji supported 🙂)"
               class="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500"
               on:keydown={(e) => e.key === 'Enter' && sendMessage()}
-              disabled={chatLoading}
+              disabled={timerLocked || chatLoading}
             />
             <!-- Emoji Picker -->
             <div class="relative">
@@ -1539,7 +1603,7 @@
                 type="button"
                 class="px-3 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 border border-gray-300 text-sm disabled:opacity-50"
                 on:click={() => showEmojiPicker = !showEmojiPicker}
-                disabled={chatLoading}
+                disabled={timerLocked || chatLoading}
                 title="Emoji"
               >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1570,7 +1634,7 @@
               type="button"
               class="px-3 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 border border-gray-300 text-sm disabled:opacity-50"
               on:click={() => audioInput && audioInput.click()}
-              disabled={audioUploading || chatLoading}
+              disabled={timerLocked || audioUploading || chatLoading}
             >
               {#if audioUploading}
                 Uploading...
@@ -1588,7 +1652,7 @@
             <button
               class="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50"
               on:click={sendMessage}
-              disabled={chatLoading || !newMessage.trim()}
+              disabled={timerLocked || chatLoading || !newMessage.trim()}
             >
               {#if chatLoading}
                 <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
@@ -1616,16 +1680,24 @@
 
 <!-- Annotation Modal -->
 {#if showAnnotationModal}
-  <div 
+  <div
     class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 sm:p-6"
     role="dialog"
     aria-modal="true"
     tabindex="-1"
   >
-    <div 
+    <div
       class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto"
     >
       <div class="p-6">
+        {#if timerLocked}
+          <div class="bg-yellow-50 border border-yellow-200 rounded-md p-3 text-sm text-yellow-700 mb-4 flex items-center">
+            <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Time is up. Cannot add annotations.
+          </div>
+        {/if}
         <div class="flex items-center justify-between mb-4">
           <h3 class="text-lg font-semibold text-gray-900">Add Annotation</h3>
           <button 
@@ -1656,6 +1728,7 @@
             rows="4"
             class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
             placeholder="Share your thoughts, ask questions, or start a discussion..."
+            disabled={timerLocked}
           ></textarea>
         </div>
 
@@ -1670,7 +1743,7 @@
           <Button 
             variant="primary" 
             on:click={createAnnotation} 
-            disabled={annotationLoading || !annotationText.trim()}
+            disabled={timerLocked || annotationLoading || !annotationText.trim()}
           >
             {#if annotationLoading}
               <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
@@ -1726,6 +1799,7 @@
             rows="4"
             class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-orange-500 focus:border-orange-500"
             placeholder="Enter your annotation note..."
+            disabled={timerLocked}
           ></textarea>
         </div>
         {#if annotationError}
@@ -1735,7 +1809,7 @@
           <Button variant="secondary" on:click={() => { showPdfAnnotationModal = false; annotationError = ''; }} disabled={annotationLoading}>
             Cancel
           </Button>
-          <Button variant="primary" on:click={createPdfAnnotation} disabled={annotationLoading || !pdfAnnotationContent.trim()}>
+          <Button variant="primary" on:click={createPdfAnnotation} disabled={timerLocked || annotationLoading || !pdfAnnotationContent.trim()}>
             {#if annotationLoading}
               <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>

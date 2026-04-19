@@ -16,7 +16,9 @@
     description: '',
     content: '',
     dueDate: '',
-    readingTextId: ''
+    readingTextId: '',
+    minWords: '150',
+    maxWords: '200'
   };
 
   let readingTexts: any[] = [];
@@ -59,7 +61,9 @@
           description: exercise.description || '',
           content: exercise.content || '',
           dueDate: exercise.dueDate ? new Date(exercise.dueDate).toISOString().split('T')[0] : '',
-          readingTextId: exercise.readingTextId || ''
+          readingTextId: exercise.readingTextId || '',
+          minWords: exercise.minWords != null ? String(exercise.minWords) : '',
+          maxWords: exercise.maxWords != null ? String(exercise.maxWords) : ''
         };
       } else {
         const errorData = await response.json();
@@ -113,7 +117,9 @@
           description: formData.description.trim(),
           content: formData.content.trim(),
           dueDate: formData.dueDate || null,
-          readingTextId: formData.readingTextId || null
+          readingTextId: formData.readingTextId || null,
+          minWords: formData.minWords ? Number(formData.minWords) : null,
+          maxWords: formData.maxWords ? Number(formData.maxWords) : null
         })
       });
 
@@ -290,6 +296,42 @@
                   </select>
                 </div>
               </div>
+            </div>
+
+            <!-- Word Limit -->
+            <div class="mb-8">
+              <h3 class="text-lg font-medium text-gray-900 mb-4">Summary Word Limit</h3>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label for="minWords" class="block text-sm font-medium text-gray-700 mb-2">
+                    Minimum (words)
+                  </label>
+                  <input
+                    type="number"
+                    id="minWords"
+                    min="1"
+                    step="1"
+                    bind:value={formData.minWords}
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="150"
+                  />
+                </div>
+                <div>
+                  <label for="maxWords" class="block text-sm font-medium text-gray-700 mb-2">
+                    Maximum (words)
+                  </label>
+                  <input
+                    type="number"
+                    id="maxWords"
+                    min="1"
+                    step="1"
+                    bind:value={formData.maxWords}
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="200"
+                  />
+                </div>
+              </div>
+              <p class="text-xs text-gray-500 mt-2">Number of words allowed for student summary. Leave blank for no limit.</p>
             </div>
 
             <!-- Action Buttons -->

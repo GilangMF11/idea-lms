@@ -11,14 +11,18 @@
   let description = '';
   let dueDate = '';
   let classId = '';
+  let lessonId = '';
   let readingTextId = '';
   let classes: any[] = [];
+  let lessons: any[] = [];
   let readingTexts: any[] = [];
   let loading = false;
   let error = '';
   let content = '';
   let timerMinutes = '';
   let autoSubmitOnTimeout = true;
+  let minWords = '150';
+  let maxWords = '200';
 
   onMount(() => {
     if (!$authStore.isAuthenticated || !['TEACHER', 'ADMIN'].includes($authStore.user?.role || '')) {
@@ -28,6 +32,7 @@
 
     // Get classId from URL params
     classId = $page.url.searchParams.get('classId') || '';
+    lessonId = $page.url.searchParams.get('lessonId') || '';
     loadClasses();
   });
 
@@ -74,9 +79,34 @@
     }
   }
 
+  async function loadLessons() {
+    if (!classId) {
+      lessons = [];
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/lessons?classId=${classId}`, {
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        lessons = data.lessons || [];
+      }
+    } catch (err) {
+      console.error('Error loading lessons:', err);
+      lessons = [];
+    }
+  }
+
   $: if (classId) {
+    loadLessons();
     loadReadingTexts();
-    readingTextId = ''; // Reset reading text selection when class changes
+    readingTextId = '';
   }
 
   async function handleSubmit() {
@@ -87,6 +117,11 @@
 
     if (!classId) {
       error = 'Please select a class';
+      return;
+    }
+
+    if (!lessonId) {
+      error = 'Please select a lesson';
       return;
     }
 
@@ -119,10 +154,13 @@
         description: description.trim() || null,
         content: content.trim(),
         classId,
+        lessonId,
         readingTextId: readingTextId || null,
         dueDate: dueDate || null,
         timerDuration,
-        autoSubmitOnTimeout
+        autoSubmitOnTimeout,
+        minWords: minWords ? Number(minWords) : null,
+        maxWords: maxWords ? Number(maxWords) : null
       })
     });
 
@@ -242,6 +280,26 @@
 
               {#if classId}
                 <div>
+                  <label for="lessonId" class="block text-sm font-medium text-gray-700 mb-2">Lesson</label>
+                  <select
+                    id="lessonId"
+                    bind:value={lessonId}
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                    required
+                  >
+                    <option value="">Select lesson</option>
+                    {#each lessons as lesson}
+                      <option value={lesson.id}>{lesson.title}</option>
+                    {/each}
+                  </select>
+                  {#if lessons.length === 0 && classId}
+                    <p class="mt-1 text-xs text-gray-500">No lessons available. A default lesson will be used.</p>
+                  {/if}
+                </div>
+              {/if}
+
+              {#if classId}
+                <div>
                   <label for="readingTextId" class="block text-sm font-medium text-gray-700 mb-2">
                     Reading Text (Optional)
                     <span class="text-xs font-normal text-gray-500 ml-1">- Link to a reading text</span>
@@ -303,6 +361,42 @@
                     Auto submit when timer ends
                   </label>
                 </div>
+              </div>
+
+              <!-- Word Limit -->
+              <div class="border border-gray-200 rounded-lg p-4">
+                <h3 class="text-sm font-medium text-gray-900 mb-3">Summary Word Limit</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label for="minWords" class="block text-sm font-medium text-gray-700 mb-1">
+                      Minimum (words)
+                    </label>
+                    <input
+                      id="minWords"
+                      type="number"
+                      min="1"
+                      step="1"
+                      bind:value={minWords}
+                      class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                      placeholder="150"
+                    />
+                  </div>
+                  <div>
+                    <label for="maxWords" class="block text-sm font-medium text-gray-700 mb-1">
+                      Maximum (words)
+                    </label>
+                    <input
+                      id="maxWords"
+                      type="number"
+                      min="1"
+                      step="1"
+                      bind:value={maxWords}
+                      class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                      placeholder="200"
+                    />
+                  </div>
+                </div>
+                <p class="text-xs text-gray-500 mt-2">Number of words allowed for student summary. Leave blank for no limit.</p>
               </div>
             </div>
           </div>

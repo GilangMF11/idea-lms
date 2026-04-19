@@ -209,14 +209,21 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
       description,
       content,
       classId,
+      lessonId,
       readingTextId,
       dueDate,
       timerDuration,
-      autoSubmitOnTimeout = true
+      autoSubmitOnTimeout = true,
+      minWords,
+      maxWords
     } = await request.json();
 
     if (!title || !classId) {
       return json({ error: 'Title and Class ID are required' }, { status: 400 });
+    }
+
+    if (!lessonId) {
+      return json({ error: 'Lesson ID is required' }, { status: 400 });
     }
 
     if (!content || !content.trim()) {
@@ -252,10 +259,13 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
         description: description || null,
         content,
         classId,
+        lessonId,
         readingTextId: readingTextId || null,
         dueDate: dueDate ? new Date(dueDate) : null,
         ...(normalizedTimerDuration !== null && { timerDuration: normalizedTimerDuration }),
-        ...(autoSubmitOnTimeout !== undefined && { autoSubmitOnTimeout: Boolean(autoSubmitOnTimeout) })
+        ...(autoSubmitOnTimeout !== undefined && { autoSubmitOnTimeout: Boolean(autoSubmitOnTimeout) }),
+        ...(minWords !== undefined && minWords !== null && { minWords: Number(minWords) }),
+        ...(maxWords !== undefined && maxWords !== null && { maxWords: Number(maxWords) })
       } as any,
       include: {
         class: {
@@ -300,7 +310,9 @@ export const PUT: RequestHandler = async ({ request }: { request: any }) => {
       content,
       dueDate,
       timerDuration,
-      autoSubmitOnTimeout
+      autoSubmitOnTimeout,
+      minWords,
+      maxWords
     } = await request.json();
 
     if (!id) {
@@ -341,7 +353,9 @@ export const PUT: RequestHandler = async ({ request }: { request: any }) => {
         content: content !== undefined ? content : existingExercise.content,
         dueDate: dueDate ? new Date(dueDate) : existingExercise.dueDate,
         ...(timerDuration !== undefined && { timerDuration: normalizedTimerDuration }),
-        ...(autoSubmitOnTimeout !== undefined && { autoSubmitOnTimeout: Boolean(autoSubmitOnTimeout) })
+        ...(autoSubmitOnTimeout !== undefined && { autoSubmitOnTimeout: Boolean(autoSubmitOnTimeout) }),
+        ...(minWords !== undefined && { minWords: minWords ? Number(minWords) : null }),
+        ...(maxWords !== undefined && { maxWords: maxWords ? Number(maxWords) : null })
       } as any,
       include: {
         class: {

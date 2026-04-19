@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
-import type { RequestHandler } from './$types';
-import { prisma } from '$lib/database';
-import { verifyToken } from '$lib/auth';
+import type { RequestHandler } from './$types.js';
+import { prisma } from '$lib/database.js';
+import { verifyToken } from '$lib/auth.js';
 
 export const GET: RequestHandler = async ({ url, cookies }) => {
   try {

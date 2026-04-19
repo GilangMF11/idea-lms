@@ -46,7 +46,8 @@ export const POST: RequestHandler = async ({ request, params }: { request: any; 
       return json({ error: 'Group not found' }, { status: 404 });
     }
 
-    if (group.class.teacherId !== user.id && user.role !== 'ADMIN') {
+    // Access check: teacher/admin or student enrolled in the class
+    if (isTeacherAddingStudent && group.class.teacherId !== user.id && user.role !== 'ADMIN') {
       return json({ error: 'Access denied' }, { status: 403 });
     }
 
@@ -54,7 +55,7 @@ export const POST: RequestHandler = async ({ request, params }: { request: any; 
     const enrollment = await prisma.classStudent.findFirst({
       where: {
         classId: group.classId,
-        studentId
+        studentId: targetStudentId
       }
     });
 
@@ -72,6 +73,30 @@ export const POST: RequestHandler = async ({ request, params }: { request: any; 
 
     if (existingMember) {
       return json({ error: 'Student is already a member of this group' }, { status: 400 });
+    }
+
+    // Check if student already joined another group in the same lesson
+    if (isStudentJoiningThemselves && group.lessonId) {
+      const lessonGroups = await prisma.group.findMany({
+        where: {
+          classId: group.classId,
+          lessonId: group.lessonId,
+          isActive: true
+        },
+        select: { id: true }
+      });
+      const lessonGroupIds = lessonGroups.map((g: { id: string }) => g.id);
+
+      const existingLessonMembership = await prisma.groupMember.findFirst({
+        where: {
+          studentId: targetStudentId,
+          groupId: { in: lessonGroupIds }
+        }
+      });
+
+      if (existingLessonMembership) {
+        return json({ error: 'You have already joined a group in this lesson' }, { status: 400 });
+      }
     }
 
     // Add member

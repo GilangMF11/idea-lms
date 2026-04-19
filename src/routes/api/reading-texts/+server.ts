@@ -1,9 +1,9 @@
 import { json } from '@sveltejs/kit';
-import type { RequestHandler } from '@sveltejs/kit';
+import type { RequestHandler } from './$types.js';
 import { prisma } from '$lib/database.js';
 import { verifyToken } from '$lib/auth.js';
 
-export const GET: RequestHandler = async ({ request, url }: { request: any; url: any }) => {
+export const GET: RequestHandler = async ({ request, url }) => {
   try {
     const authHeader = request.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) {
@@ -77,6 +77,15 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
           if (!groupMembership) {
             return json({ error: 'Access denied: You are not a member of this group' }, { status: 403 });
           }
+        }
+
+        // Check schedule access for students
+        const now = new Date();
+        if (readingText.openAt && now < readingText.openAt) {
+          return json({ error: 'Material not yet available', scheduleType: 'not_yet_open', openAt: readingText.openAt }, { status: 403 });
+        }
+        if (readingText.closeAt && now > readingText.closeAt) {
+          return json({ error: 'Material has been closed', scheduleType: 'closed', closeAt: readingText.closeAt }, { status: 403 });
         }
       } else if (user.role === 'TEACHER') {
         // Check if teacher owns the class
@@ -267,7 +276,7 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
   }
 };
 
-export const POST: RequestHandler = async ({ request }: { request: any }) => {
+export const POST: RequestHandler = async ({ request }) => {
   try {
     const authHeader = request.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) {
@@ -280,7 +289,7 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
       return json({ error: 'Only teachers can create reading texts' }, { status: 403 });
     }
 
-    const { title, content, author, source, classId, groupId, isActive = true, timerDuration, pdfUrl } = await request.json();
+    const { title, content, author, source, classId, lessonId, groupId, isActive = true, timerDuration, pdfUrl, openAt, closeAt } = await request.json();
 
     const normalizedTimerDuration =
       timerDuration !== undefined && timerDuration !== null && timerDuration !== ''
@@ -294,8 +303,26 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
       return json({ error: 'Timer duration must be a non-negative number' }, { status: 400 });
     }
 
+    // Parse and validate schedule
+    const parsedOpenAt = openAt ? new Date(openAt) : null;
+    const parsedCloseAt = closeAt ? new Date(closeAt) : null;
+
+    if (parsedOpenAt && isNaN(parsedOpenAt.getTime())) {
+      return json({ error: 'Invalid openAt date' }, { status: 400 });
+    }
+    if (parsedCloseAt && isNaN(parsedCloseAt.getTime())) {
+      return json({ error: 'Invalid closeAt date' }, { status: 400 });
+    }
+    if (parsedOpenAt && parsedCloseAt && parsedCloseAt <= parsedOpenAt) {
+      return json({ error: 'closeAt must be after openAt' }, { status: 400 });
+    }
+
     if (!title || !classId) {
       return json({ error: 'Title and Class ID are required' }, { status: 400 });
+    }
+
+    if (!lessonId) {
+      return json({ error: 'Lesson ID is required' }, { status: 400 });
     }
     const hasContent = (content && String(content).trim()) || (pdfUrl && String(pdfUrl).trim());
     if (!hasContent) {
@@ -338,9 +365,12 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
         author: author || null,
         source: source || null,
         classId,
+        lessonId,
         groupId: groupId || null,
         isActive,
-        timerDuration: normalizedTimerDuration
+        timerDuration: normalizedTimerDuration,
+        openAt: parsedOpenAt,
+        closeAt: parsedCloseAt
       },
       include: {
         class: {
@@ -359,7 +389,7 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
   }
 };
 
-export const PUT: RequestHandler = async ({ request }: { request: any }) => {
+export const PUT: RequestHandler = async ({ request }) => {
   try {
     const authHeader = request.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) {
@@ -372,7 +402,7 @@ export const PUT: RequestHandler = async ({ request }: { request: any }) => {
       return json({ error: 'Only teachers can update reading texts' }, { status: 403 });
     }
 
-    const { id, title, content, author, source, groupId, isActive, timerDuration, pdfUrl } = await request.json();
+    const { id, title, content, author, source, groupId, isActive, timerDuration, pdfUrl, openAt, closeAt } = await request.json();
 
     const normalizedTimerDuration =
       timerDuration !== undefined && timerDuration !== null && timerDuration !== ''
@@ -383,7 +413,7 @@ export const PUT: RequestHandler = async ({ request }: { request: any }) => {
       timerDuration !== undefined &&
       timerDuration !== null &&
       timerDuration !== '' &&
-      (Number.isNaN(normalizedTimerDuration) || normalizedTimerDuration < 0)
+      (Number.isNaN(normalizedTimerDuration!) || normalizedTimerDuration! < 0)
     ) {
       return json({ error: 'Timer duration must be a non-negative number' }, { status: 400 });
     }
@@ -424,6 +454,20 @@ export const PUT: RequestHandler = async ({ request }: { request: any }) => {
       }
     }
 
+    // Parse and validate schedule
+    const parsedOpenAt = openAt !== undefined ? (openAt ? new Date(openAt) : null) : existingReadingText.openAt;
+    const parsedCloseAt = closeAt !== undefined ? (closeAt ? new Date(closeAt) : null) : existingReadingText.closeAt;
+
+    if (parsedOpenAt && isNaN(parsedOpenAt.getTime())) {
+      return json({ error: 'Invalid openAt date' }, { status: 400 });
+    }
+    if (parsedCloseAt && isNaN(parsedCloseAt.getTime())) {
+      return json({ error: 'Invalid closeAt date' }, { status: 400 });
+    }
+    if (parsedOpenAt && parsedCloseAt && parsedCloseAt <= parsedOpenAt) {
+      return json({ error: 'closeAt must be after openAt' }, { status: 400 });
+    }
+
     // Update reading text
     const updateData: any = {
       title: title || existingReadingText.title,
@@ -435,7 +479,9 @@ export const PUT: RequestHandler = async ({ request }: { request: any }) => {
       timerDuration:
         timerDuration !== undefined
           ? normalizedTimerDuration
-          : existingReadingText.timerDuration
+          : existingReadingText.timerDuration,
+      openAt: parsedOpenAt,
+      closeAt: parsedCloseAt
     };
     if (pdfUrl !== undefined) {
       updateData.pdfUrl = (pdfUrl && String(pdfUrl).trim()) ? pdfUrl : null;
@@ -460,7 +506,7 @@ export const PUT: RequestHandler = async ({ request }: { request: any }) => {
   }
 };
 
-export const DELETE: RequestHandler = async ({ request, url }: { request: any; url: any }) => {
+export const DELETE: RequestHandler = async ({ request, url }) => {
   try {
     const authHeader = request.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) {

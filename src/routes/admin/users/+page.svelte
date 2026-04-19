@@ -156,12 +156,12 @@
       const data = await response.json();
 
       if (response.ok) {
-        success = 'User berhasil diperbarui';
+        success = 'User updated successfully';
         closeEditModal();
         await loadUsers();
         setTimeout(() => { success = ''; }, 3000);
       } else {
-        error = data.error || 'Gagal memperbarui user';
+        error = data.error || 'Failed to update user';
       }
     } catch (err) {
       error = 'An error occurred while updating user';
@@ -171,7 +171,7 @@
   }
 
   async function handleDelete(userId: string) {
-    if (!confirm('Apakah Anda yakin ingin menonaktifkan user ini?')) {
+    if (!confirm('Are you sure you want to disable this user?')) {
       return;
     }
 
@@ -187,12 +187,12 @@
       });
 
       if (response.ok) {
-        success = 'User berhasil dinonaktifkan';
+        success = 'User disabled successfully';
         await loadUsers();
         setTimeout(() => { success = ''; }, 3000);
       } else {
         const data = await response.json();
-        error = data.error || 'Gagal menonaktifkan user';
+        error = data.error || 'Failed to disable user';
       }
     } catch (err) {
       error = 'An error occurred while disabling user';
@@ -219,7 +219,7 @@
         await loadUsers();
       } else {
         const data = await response.json();
-        error = data.error || 'Gagal mengubah status user';
+        error = data.error || 'Failed to change user status';
       }
     } catch (err) {
       error = 'An error occurred while changing user status';
@@ -273,7 +273,7 @@
     <div class="mb-8">
       <h2 class="text-3xl font-bold text-gray-900">Manage Users</h2>
       <p class="mt-2 text-sm text-gray-600">
-        Kelola semua user dalam sistem
+        Manage all users in the system
       </p>
     </div>
 
@@ -296,11 +296,11 @@
       <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
         <!-- Search -->
         <div class="md:col-span-2">
-          <label for="searchQuery" class="block text-sm font-medium text-gray-700 mb-1">Cari User</label>
+          <label for="searchQuery" class="block text-sm font-medium text-gray-700 mb-1">Search User</label>
           <input
             id="searchQuery"
             type="text"
-            placeholder="Nama, email, atau username..."
+            placeholder="Name, email, or username..."
             bind:value={searchQuery}
             on:keydown={(e) => {
               if (e instanceof KeyboardEvent && e.key === 'Enter') {
@@ -313,16 +313,16 @@
 
         <!-- Role Filter -->
         <div>
-          <label for="roleFilter" class="block text-sm font-medium text-gray-700 mb-1">Filter Peran</label>
+          <label for="roleFilter" class="block text-sm font-medium text-gray-700 mb-1">Filter Role</label>
           <select
             id="roleFilter"
             bind:value={roleFilter}
             on:change={handleFilter}
             class="input-field"
           >
-            <option value="">Semua Peran</option>
-            <option value="STUDENT">Mahasiswa</option>
-            <option value="TEACHER">Dosen</option>
+            <option value="">All Roles</option>
+            <option value="STUDENT">Student</option>
+            <option value="TEACHER">Teacher</option>
             <option value="ADMIN">Admin</option>
           </select>
         </div>
@@ -336,16 +336,16 @@
             on:change={handleFilter}
             class="input-field"
           >
-            <option value="">Semua Status</option>
-            <option value="true">Aktif</option>
-            <option value="false">Tidak Aktif</option>
+            <option value="">All Statuses</option>
+            <option value="true">Active</option>
+            <option value="false">Inactive</option>
           </select>
         </div>
       </div>
 
       <div class="mt-4">
         <Button variant="primary" size="sm" on:click={handleSearch}>
-          Cari
+          Search
         </Button>
       </div>
     </div>
@@ -355,15 +355,15 @@
       {#if loading}
         <div class="flex items-center justify-center py-12">
           <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-          <span class="ml-2 text-gray-600">Memuat data...</span>
+          <span class="ml-2 text-gray-600">Loading data...</span>
         </div>
       {:else if users.length === 0}
         <div class="text-center py-12">
           <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
           </svg>
-          <h3 class="mt-2 text-sm font-medium text-gray-900">Tidak ada user</h3>
-          <p class="mt-1 text-sm text-gray-500">Tidak ada user yang ditemukan.</p>
+          <h3 class="mt-2 text-sm font-medium text-gray-900">No users found</h3>
+          <p class="mt-1 text-sm text-gray-500">No users were found.</p>
         </div>
       {:else}
         <div class="overflow-x-auto">
@@ -372,11 +372,11 @@
               <tr>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Peran</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Institusi</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Institution</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bergabung</th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Joined</th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
@@ -411,11 +411,11 @@
                   <td class="px-6 py-4 whitespace-nowrap">
                     {#if user.isActive}
                       <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        Aktif
+                        Active
                       </span>
                     {:else}
                       <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                        Tidak Aktif
+                        Inactive
                       </span>
                     {/if}
                   </td>
@@ -480,7 +480,7 @@
                 disabled={currentPage === 1}
                 class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
               >
-                Sebelumnya
+                Previous
               </button>
               <button
                 type="button"
@@ -488,13 +488,13 @@
                 disabled={currentPage === totalPages}
                 class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
               >
-                Selanjutnya
+                Next
               </button>
             </div>
             <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
               <div>
                 <p class="text-sm text-gray-700">
-                  Menampilkan <span class="font-medium">{(currentPage - 1) * pageSize + 1}</span> sampai <span class="font-medium">{Math.min(currentPage * pageSize, totalUsers)}</span> dari <span class="font-medium">{totalUsers}</span> user
+                  Showing <span class="font-medium">{(currentPage - 1) * pageSize + 1}</span> to <span class="font-medium">{Math.min(currentPage * pageSize, totalUsers)}</span> of <span class="font-medium">{totalUsers}</span> users
                 </p>
               </div>
               <div>
@@ -505,7 +505,7 @@
                     disabled={currentPage === 1}
                     class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
                   >
-                    Sebelumnya
+                    Previous
                   </button>
                   {#each Array(totalPages) as _, i}
                     {#if i + 1 === currentPage || i + 1 === 1 || i + 1 === totalPages || (i + 1 >= currentPage - 1 && i + 1 <= currentPage + 1)}
@@ -528,7 +528,7 @@
                     disabled={currentPage === totalPages}
                     class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
                   >
-                    Selanjutnya
+                    Next
                   </button>
                 </nav>
               </div>
@@ -568,7 +568,7 @@
           type="button"
           on:click={closeEditModal}
           class="text-gray-400 hover:text-gray-500"
-          aria-label="Tutup modal"
+          aria-label="Close modal"
         >
           <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -580,13 +580,13 @@
         <!-- Name Fields -->
         <div class="grid grid-cols-2 gap-4">
         <FormField
-          label="Nama Depan"
+          label="First Name"
           type="text"
           bind:value={editFirstName}
           required
         />
         <FormField
-          label="Nama Belakang"
+          label="Last Name"
           type="text"
           bind:value={editLastName}
           required
@@ -603,15 +603,15 @@
             disabled
             class="input-field bg-gray-50 cursor-not-allowed"
           />
-          <p class="text-xs text-gray-500 mt-1">Email tidak dapat diubah</p>
+          <p class="text-xs text-gray-500 mt-1">Email cannot be changed</p>
         </div>
 
         <!-- Role -->
         <div>
-          <label for="editRole" class="block text-sm font-medium text-gray-700 mb-1">Peran</label>
+          <label for="editRole" class="block text-sm font-medium text-gray-700 mb-1">Role</label>
           <select id="editRole" bind:value={editRole} class="input-field">
-            <option value="STUDENT">Mahasiswa</option>
-            <option value="TEACHER">Dosen</option>
+            <option value="STUDENT">Student</option>
+            <option value="TEACHER">Teacher</option>
             <option value="ADMIN">Admin</option>
           </select>
         </div>
@@ -625,28 +625,28 @@
             class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
           />
           <label for="editIsActive" class="ml-2 block text-sm text-gray-700">
-            User Aktif
+            Active User
           </label>
         </div>
 
         <!-- Biodata Fields -->
         <div class="border-t border-gray-200 pt-4">
-          <h4 class="text-sm font-medium text-gray-900 mb-4">Informasi Tambahan</h4>
+          <h4 class="text-sm font-medium text-gray-900 mb-4">Additional Information</h4>
           
           <FormField
-            label="No WhatsApp"
+            label="WhatsApp Number"
             type="tel"
             bind:value={editPhoneNumber}
           />
 
           <FormField
-            label="Institusi"
+            label="Institution"
             type="text"
             bind:value={editInstitution}
           />
 
           <FormField
-            label="Program Studi"
+            label="Study Program"
             type="text"
             bind:value={editProgram}
           />
@@ -654,7 +654,7 @@
           <div>
             <label for="editSemester" class="block text-sm font-medium text-gray-700 mb-1">Semester</label>
             <select id="editSemester" bind:value={editSemester} class="input-field">
-              <option value="">Pilih Semester</option>
+              <option value="">Select Semester</option>
               <option value="1">Semester 1</option>
               <option value="2">Semester 2</option>
               <option value="3">Semester 3</option>
@@ -668,12 +668,12 @@
 
           <div class="grid grid-cols-2 gap-4">
             <FormField
-              label="Provinsi"
+              label="Province"
               type="text"
               bind:value={editProvince}
             />
             <FormField
-              label="Kota"
+              label="City"
               type="text"
               bind:value={editCity}
             />
@@ -683,10 +683,10 @@
       
       <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
         <Button variant="secondary" size="md" on:click={closeEditModal} disabled={isSaving}>
-          Batal
+          Cancel
         </Button>
         <Button variant="primary" size="md" on:click={handleSave} loading={isSaving} disabled={isSaving}>
-          {isSaving ? 'Menyimpan...' : 'Simpan'}
+          {isSaving ? 'Saving...' : 'Save'}
         </Button>
       </div>
     </div>

@@ -86,7 +86,7 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
         }
       },
       orderBy: {
-        createdAt: 'desc'
+        name: 'asc'
       }
     });
 
@@ -111,7 +111,7 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
       return json({ error: 'Only teachers and admins can create groups' }, { status: 403 });
     }
 
-    const { classId, name, description, studentIds } = await request.json();
+    const { classId, lessonId, name, description, studentIds } = await request.json();
 
     if (!classId || !name) {
       return json({ error: 'Class ID and name are required' }, { status: 400 });
@@ -142,7 +142,8 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
         data: {
           name,
           description: description || null,
-          classId
+          classId,
+          lessonId: lessonId || null
         }
       });
 

@@ -10,6 +10,7 @@
   let statistics: any[] = [];
   let loading = true;
   let error = '';
+  let exporting = false;
 
   // Modal State
   let showStudentDetailModal = false;
@@ -102,9 +103,9 @@
             colorScale: {
               ranges: [
                 { from: 0, to: 0, name: 'None', color: '#f3f4f6' },
-                { from: 1, to: 2, name: 'Low', color: '#dbeafe' },
-                { from: 3, to: 5, name: 'Medium', color: '#60a5fa' },
-                { from: 6, to: 1000, name: 'High', color: '#2563eb' }
+                { from: 1, to: 2, name: 'Low', color: '#ef4444' }, // red-500
+                { from: 3, to: 5, name: 'Medium', color: '#eab308' }, // yellow-500
+                { from: 6, to: 1000, name: 'High', color: '#22c55e' } // green-500
               ]
             }
           }
@@ -156,6 +157,42 @@
       loadingMessages = false;
     }
   }
+
+  async function handleExport() {
+    try {
+      exporting = true;
+      const classId = $page.params.id;
+      const response = await fetch(`/api/chat/export?classId=${classId}`, {
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+        },
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const disposition = response.headers.get('Content-Disposition');
+        const filename = disposition
+          ? disposition.split('filename=')[1]?.replace(/"/g, '')
+          : `heat-map-export-${new Date().toISOString().slice(0, 10)}.csv`;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Export failed');
+      }
+    } catch (err) {
+      console.error('Export error:', err);
+      alert('Export failed');
+    } finally {
+      exporting = false;
+    }
+  }
 </script>
 
 <svelte:head>
@@ -176,6 +213,14 @@
           </Button>
           <h1 class="text-xl font-semibold text-gray-900">Discussion Statistics</h1>
         </div>
+        {#if $authStore.user?.role === 'TEACHER' || $authStore.user?.role === 'ADMIN'}
+          <Button variant="primary" size="sm" disabled={exporting || statistics.length === 0} on:click={handleExport}>
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            {exporting ? 'Exporting...' : 'Export CSV'}
+          </Button>
+        {/if}
       </div>
     </div>
   </div>

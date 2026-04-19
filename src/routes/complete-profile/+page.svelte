@@ -125,7 +125,7 @@
   async function handleSubmit() {
     // Validation
     if (!firstName || !lastName || !phoneNumber || !institution || !program || !semester || !province || !city) {
-      error = 'Mohon lengkapi semua field';
+      error = 'Please complete all fields';
       return;
     }
 
@@ -135,7 +135,7 @@
     try {
       const token = $authStore.token;
       if (!token) {
-        error = 'Tidak ada token autentikasi';
+        error = 'No authentication token';
         isLoading = false;
         return;
       }
@@ -161,7 +161,7 @@
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Gagal memperbarui profil');
+        throw new Error(data.error || 'Failed to update profile');
       }
 
       // Update auth store with new user data
@@ -178,7 +178,7 @@
       console.log('Profile updated successfully, redirecting to dashboard');
       goto('/dashboard');
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Gagal memperbarui profil';
+      error = err instanceof Error ? err.message : 'Failed to update profile';
     } finally {
       isLoading = false;
     }
@@ -193,7 +193,7 @@
 </script>
 
 <svelte:head>
-  <title>Lengkapi Profil - IDEA</title>
+  <title>Complete Profile - IDEA</title>
 </svelte:head>
 
 <div class="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
@@ -205,9 +205,9 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
         </svg>
       </div>
-      <h2 class="text-3xl font-bold text-gray-900">Lengkapi Profil Anda</h2>
+      <h2 class="text-3xl font-bold text-gray-900">Complete Your Profile</h2>
       <p class="mt-2 text-sm text-gray-600">
-        Mohon lengkapi data diri Anda untuk melanjutkan
+        Please complete your personal data to continue
       </p>
     </div>
 
@@ -223,7 +223,7 @@
       <!-- Name Fields -->
       <div class="grid grid-cols-2 gap-4">
         <FormField
-          label="Nama Depan"
+          label="First Name"
           type="text"
           placeholder="John"
           bind:value={firstName}
@@ -232,7 +232,7 @@
         />
 
         <FormField
-          label="Nama Belakang"
+          label="Last Name"
           type="text"
           placeholder="Doe"
           bind:value={lastName}
@@ -323,7 +323,7 @@
         loading={isLoading}
         disabled={isLoading}
       >
-        {isLoading ? 'Menyimpan...' : 'Simpan & Lanjutkan'}
+        {isLoading ? 'Saving...' : 'Save & Continue'}
       </Button>
     </form>
   </div>

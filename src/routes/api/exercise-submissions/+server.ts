@@ -114,6 +114,22 @@ export const POST: RequestHandler = async ({ request }) => {
       return json({ error: 'Submission already exists for this exercise' }, { status: 409 });
     }
 
+    // Word count validation (skip for auto-submitted timer expired)
+    const isAutoSubmitted = answer === 'Auto-submitted (timer expired)';
+    if (!isAutoSubmitted && (exercise.minWords || exercise.maxWords)) {
+      const cleanAnswer = answer.replace(/--- Attached Files ---[\s\S]*$/, '').trim();
+      const wordCount = cleanAnswer.split(/\s+/).filter((w: string) => w.length > 0).length;
+      const minWords = exercise.minWords || 0;
+      const maxWords = exercise.maxWords || Infinity;
+
+      if (wordCount < minWords) {
+        return json({ error: `Summary terlalu pendek. Minimal ${minWords} kata (saat ini ${wordCount} kata)` }, { status: 400 });
+      }
+      if (wordCount > maxWords) {
+        return json({ error: `Summary terlalu panjang. Maksimal ${maxWords} kata (saat ini ${wordCount} kata)` }, { status: 400 });
+      }
+    }
+
     const submission = await prisma.exerciseSubmission.create({
       data: {
         exerciseId,

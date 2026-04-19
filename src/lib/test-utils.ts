@@ -36,6 +36,7 @@ export async function createTestReadingText(data: {
   title: string;
   content: string;
   classId: string;
+  lessonId: string;
   author?: string;
   source?: string;
 }) {
@@ -104,6 +105,7 @@ export async function createTestExercise(data: {
   content: string;
   type: 'INDIVIDUAL' | 'GROUP';
   classId: string;
+  lessonId: string;
   readingTextId?: string;
   dueDate?: Date;
 }) {
@@ -226,6 +228,7 @@ export async function seedTestData() {
     title: 'Sample Reading Text',
     content: 'This is a sample reading text for testing purposes.',
     classId: testClass.id,
+    lessonId: 'default-lesson-' + testClass.id,
     author: 'Test Author',
     source: 'Test Source',
   });

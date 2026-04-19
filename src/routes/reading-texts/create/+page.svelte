@@ -12,8 +12,10 @@
   let source = '';
   let classId = '';
   let groupId = '';
+  let lessonId = '';
   let classes: any[] = [];
   let groups: any[] = [];
+  let lessons: any[] = [];
   let loading = false;
   let error = '';
   let timerDurationMinutes = '';
@@ -27,6 +29,9 @@
   let pdfUploading = false;
   let pdfUploadError = '';
   let pdfInput: HTMLInputElement;
+  let enableSchedule = false;
+  let openAt = '';
+  let closeAt = '';
 
   onMount(() => {
     if (!$authStore.isAuthenticated || !['TEACHER', 'ADMIN'].includes($authStore.user?.role || '')) {
@@ -37,22 +42,29 @@
     // Get classId and groupId from URL params
     classId = $page.url.searchParams.get('classId') || '';
     groupId = $page.url.searchParams.get('groupId') || '';
+    lessonId = $page.url.searchParams.get('lessonId') || '';
     loadClasses();
     if (classId) {
+      loadLessons();
       loadGroups();
     }
   });
 
   $: if (classId) {
-    // Load groups when classId changes
+    // Load lessons and groups when classId changes
+    loadLessons();
     loadGroups();
     // Only reset groupId if it's not in URL params
     if (!$page.url.searchParams.get('groupId')) {
       groupId = '';
     }
+    if (!$page.url.searchParams.get('lessonId')) {
+      lessonId = '';
+    }
   } else {
     // Clear groups when no class is selected
     groups = [];
+    lessons = [];
   }
 
   async function loadClasses() {
@@ -98,6 +110,32 @@
     } catch (err) {
       console.error('Error loading groups:', err);
       groups = [];
+    }
+  }
+
+  async function loadLessons() {
+    if (!classId) {
+      lessons = [];
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/lessons?classId=${classId}`, {
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        lessons = data.lessons || [];
+      } else {
+        lessons = [];
+      }
+    } catch (err) {
+      console.error('Error loading lessons:', err);
+      lessons = [];
     }
   }
 
@@ -219,6 +257,11 @@
       return;
     }
 
+    if (!lessonId) {
+      error = 'Please select a lesson';
+      return;
+    }
+
     let timerSeconds: number | null = null;
     if (timerDurationMinutes) {
       const parsedMinutes = Number(timerDurationMinutes);
@@ -238,6 +281,14 @@
     if (!hasPdf && !hasContent) {
       error = 'Please upload a PDF or add some content';
       return;
+    }
+
+    // Validate schedule
+    if (enableSchedule) {
+      if (openAt && closeAt && new Date(closeAt) <= new Date(openAt)) {
+        error = 'Closing time must be after opening time';
+        return;
+      }
     }
 
     try {
@@ -266,8 +317,11 @@
           author: author || null,
           source: source || null,
           classId,
+          lessonId,
           groupId: groupId || null,
-          timerDuration: timerSeconds
+          timerDuration: timerSeconds,
+          openAt: enableSchedule && openAt ? new Date(openAt).toISOString() : null,
+          closeAt: enableSchedule && closeAt ? new Date(closeAt).toISOString() : null
         })
       });
 
@@ -358,6 +412,26 @@
 
         {#if classId}
           <div>
+            <label for="lessonId" class="block text-sm font-medium text-gray-700 mb-2">Lesson</label>
+            <select
+              id="lessonId"
+              bind:value={lessonId}
+              class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              required
+            >
+              <option value="">Select lesson</option>
+              {#each lessons as lesson}
+                <option value={lesson.id}>{lesson.title}</option>
+              {/each}
+            </select>
+            {#if lessons.length === 0 && classId}
+              <p class="mt-1 text-xs text-gray-500">No lessons available. A default lesson will be used.</p>
+            {/if}
+          </div>
+        {/if}
+
+        {#if classId}
+          <div>
             <label for="groupId" class="block text-sm font-medium text-gray-700 mb-2">
               Group (Optional)
               <span class="text-xs font-normal text-gray-500 ml-1">- Leave empty to assign to class</span>
@@ -397,6 +471,50 @@
               Leave blank to skip the timer. The countdown starts when a student opens this reading text.
             </p>
           </div>
+        </div>
+
+        <!-- Schedule Section -->
+        <div class="border border-gray-200 rounded-lg p-4">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h3 class="text-sm font-medium text-gray-900">Access Schedule (Optional)</h3>
+              <p class="text-xs text-gray-500">Set when the material can be accessed by students</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" bind:checked={enableSchedule} class="sr-only peer" />
+              <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-600"></div>
+              <span class="ml-2 text-sm text-gray-600">{enableSchedule ? 'Active' : 'Inactive'}</span>
+            </label>
+          </div>
+
+          {#if enableSchedule}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+              <div>
+                <label for="openAt" class="block text-sm font-medium text-gray-700 mb-1">
+                  Opening Time
+                </label>
+                <input
+                  id="openAt"
+                  type="datetime-local"
+                  bind:value={openAt}
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                />
+                <p class="mt-1 text-xs text-gray-500">Leave blank = available immediately</p>
+              </div>
+              <div>
+                <label for="closeAt" class="block text-sm font-medium text-gray-700 mb-1">
+                  Closing Time
+                </label>
+                <input
+                  id="closeAt"
+                  type="datetime-local"
+                  bind:value={closeAt}
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                />
+                <p class="mt-1 text-xs text-gray-500">Leave blank = no time limit</p>
+              </div>
+            </div>
+          {/if}
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">

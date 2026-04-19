@@ -76,7 +76,7 @@
       }
     } catch (err) {
       console.error('Error loading profile:', err);
-      error = 'Gagal memuat data profil';
+      error = 'Failed to load profile data';
     } finally {
       loadingProfile = false;
     }
@@ -99,7 +99,7 @@
   async function handleSubmit() {
     // Validation
     if (!firstName || !lastName || !phoneNumber || !institution || !program || !semester || !province || !city) {
-      error = 'Mohon lengkapi semua field';
+      error = 'Please complete all fields';
       return;
     }
 
@@ -110,7 +110,7 @@
     try {
       const token = $authStore.token;
       if (!token) {
-        error = 'Tidak ada token autentikasi';
+        error = 'No authentication token';
         isLoading = false;
         return;
       }
@@ -136,7 +136,7 @@
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Gagal memperbarui profil');
+        throw new Error(data.error || 'Failed to update profile');
       }
 
       // Update auth store with new user data
@@ -149,13 +149,13 @@
         authStore.init();
       }
 
-      success = 'Profil berhasil diperbarui';
+      success = 'Profile updated successfully';
       isEditing = false;
       
       // Reload profile to get updated data
       await loadProfile();
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Gagal memperbarui profil';
+      error = err instanceof Error ? err.message : 'Failed to update profile';
     } finally {
       isLoading = false;
     }
@@ -240,14 +240,14 @@
       <!-- Profile Card -->
       <div class="bg-white shadow rounded-lg overflow-hidden">
         <div class="px-6 py-5 border-b border-gray-200 flex justify-between items-center">
-          <h3 class="text-lg font-medium text-gray-900">Informasi Profil</h3>
+          <h3 class="text-lg font-medium text-gray-900">Profile Information</h3>
           {#if !isEditing}
             <Button
               variant="primary"
               size="sm"
               on:click={startEdit}
             >
-              Edit Profil
+              Edit Profile
             </Button>
           {:else}
             <div class="flex space-x-2">
@@ -257,7 +257,7 @@
                 on:click={cancelEdit}
                 disabled={isLoading}
               >
-                Batal
+                Cancel
               </Button>
               <Button
                 variant="primary"
@@ -266,7 +266,7 @@
                 loading={isLoading}
                 disabled={isLoading}
               >
-                {isLoading ? 'Menyimpan...' : 'Simpan'}
+                {isLoading ? 'Saving...' : 'Save'}
               </Button>
             </div>
           {/if}
@@ -299,7 +299,7 @@
               <!-- Name Fields -->
               <div class="grid grid-cols-2 gap-4">
                 <FormField
-                  label="Nama Depan"
+                  label="First Name"
                   type="text"
                   placeholder="John"
                   bind:value={firstName}
@@ -308,7 +308,7 @@
                 />
 
                 <FormField
-                  label="Nama Belakang"
+                  label="Last Name"
                   type="text"
                   placeholder="Doe"
                   bind:value={lastName}
@@ -329,7 +329,7 @@
                     disabled
                     class="input-field bg-gray-50 cursor-not-allowed"
                   />
-                  <p class="text-xs text-gray-500">Email tidak dapat diubah</p>
+                  <p class="text-xs text-gray-500">Email cannot be changed</p>
                 </div>
 
                 <div class="space-y-1">
@@ -342,7 +342,7 @@
                     disabled
                     class="input-field bg-gray-50 cursor-not-allowed"
                   />
-                  <p class="text-xs text-gray-500">Username tidak dapat diubah</p>
+                  <p class="text-xs text-gray-500">Username cannot be changed</p>
                 </div>
               </div>
 
@@ -387,7 +387,7 @@
                   class="input-field"
                   required
                 >
-                  <option value="">Pilih Semester</option>
+                  <option value="">Select Semester</option>
                   <option value="1">Semester 1</option>
                   <option value="2">Semester 2</option>
                   <option value="3">Semester 3</option>
@@ -402,7 +402,7 @@
               <!-- Province and City -->
               <div class="grid grid-cols-2 gap-4">
                 <FormField
-                  label="Provinsi"
+                  label="Province"
                   type="text"
                   placeholder="Nama Provinsi"
                   bind:value={province}
@@ -411,7 +411,7 @@
                 />
 
                 <FormField
-                  label="Kota"
+                  label="City"
                   type="text"
                   placeholder="Nama Kota"
                   bind:value={city}
