@@ -36,17 +36,17 @@
   async function handleRegister() {
     // Validation
     if (!email || !username || !password || !confirmPassword || !firstName || !lastName || !phoneNumber || !institution || !program || !semester || !province || !city) {
-      error = 'Mohon lengkapi semua field';
+      error = 'Please fill in all fields';
       return;
     }
-    
+
     if (password !== confirmPassword) {
-      error = 'Password tidak cocok';
+      error = 'Passwords do not match';
       return;
     }
-    
+
     if (password.length < 6) {
-      error = 'Password minimal 6 karakter';
+      error = 'Password must be at least 6 characters';
       return;
     }
     
@@ -69,7 +69,11 @@
     });
     
     if (result.success) {
-      goto('/dashboard');
+      if (result.requireVerification) {
+        goto('/verify-email/pending');
+      } else {
+        goto('/dashboard');
+      }
     } else {
       error = result.error || 'Registration failed';
     }
@@ -128,7 +132,7 @@
       <!-- Name Fields -->
       <div class="grid grid-cols-2 gap-4">
         <FormField
-          label="Nama Depan"
+          label="First Name"
           type="text"
           placeholder="John"
           bind:value={firstName}
@@ -137,7 +141,7 @@
         />
 
         <FormField
-          label="Nama Belakang"
+          label="Last Name"
           type="text"
           placeholder="Doe"
           bind:value={lastName}
@@ -278,7 +282,7 @@
       <!-- Confirm Password -->
       <div class="space-y-1">
         <label for="confirmPassword" class="block text-sm font-medium text-gray-700">
-          Konfirmasi Password <span class="text-red-500">*</span>
+          Confirm Password <span class="text-red-500">*</span>
         </label>
         <div class="relative">
           <input

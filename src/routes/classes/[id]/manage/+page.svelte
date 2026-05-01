@@ -5,6 +5,7 @@
   import { authStore } from '$lib/stores/auth.js';
   import Button from '$lib/components/Button.svelte';
   import Alert from '$lib/components/Alert.svelte';
+  import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 
   let classData: any = null;
   let students: any[] = [];
@@ -28,6 +29,7 @@
   let readingTextToDelete: any = null;
   let deleteReadingTextLoading = false;
   let groups: any[] = [];
+  let lessons: any[] = [];
   let showCreateGroupModal = false;
   let showAddMemberModal = false;
   let selectedGroup: any = null;
@@ -37,6 +39,11 @@
     name: '',
     description: ''
   };
+  let showCreateLessonModal = false;
+  let createLessonLoading = false;
+  let createLessonError = '';
+  let createLessonForm = { title: '', description: '' };
+  let createGroupForLessonId: string | null = null;
   let selectedStudentsForGroup: string[] = [];
   let showAssignExistingModal = false;
   let assignModalGroup: any = null;
@@ -57,33 +64,39 @@
   let createStudentError = '';
   let activeTab = 'overview';
 
+  // Confirm Dialog State
+  let showConfirmDialog = false;
+  let isConfirmLoading = false;
+  let confirmDialogProps = {
+    title: 'Confirm Delete',
+    message: 'Are you sure you want to delete this?',
+    confirmText: 'Delete',
+    onConfirm: async () => {},
+  };
+
   onMount(() => {
-    console.log('Component mounted, checking auth...');
     if (!$authStore.isAuthenticated || !['TEACHER', 'ADMIN'].includes($authStore.user?.role || '')) {
-      console.log('User not authenticated or not authorized, redirecting...');
       goto('/dashboard');
       return;
     }
 
-    console.log('User authenticated, loading data...');
     loadClassData();
     loadAllStudents();
     loadGroups();
+    loadLessons();
   });
 
   async function loadClassData() {
     try {
-      console.log('Loading class data...');
       loading = true;
       const classId = $page.params.id;
-      
+
       if (!classId) {
         error = 'Class ID not found';
         return;
       }
 
       // Load class details
-      console.log('Fetching class details...');
       const classResponse = await fetch(`/api/classes?id=${classId}`, {
         headers: {
           'Authorization': `Bearer ${$authStore.token}`,
@@ -91,17 +104,12 @@
         }
       });
 
-      console.log('Class response status:', classResponse.status);
       if (classResponse.ok) {
         const classResult = await classResponse.json();
         classData = classResult.class;
-        console.log('Class data loaded:', classData?.name);
-      } else {
-        console.error('Failed to load class:', await classResponse.text());
       }
 
       // Load students
-      console.log('Fetching students...');
       const studentsResponse = await fetch(`/api/class-students?classId=${classId}`, {
         headers: {
           'Authorization': `Bearer ${$authStore.token}`,
@@ -109,17 +117,12 @@
         }
       });
 
-      console.log('Students response status:', studentsResponse.status);
       if (studentsResponse.ok) {
         const studentsResult = await studentsResponse.json();
         students = studentsResult.students || [];
-        console.log('Students loaded:', students.length);
-      } else {
-        console.error('Failed to load students:', await studentsResponse.text());
       }
 
       // Load exercises
-      console.log('Fetching exercises...');
       const exercisesResponse = await fetch(`/api/exercises?classId=${classId}`, {
         headers: {
           'Authorization': `Bearer ${$authStore.token}`,
@@ -127,17 +130,12 @@
         }
       });
 
-      console.log('Exercises response status:', exercisesResponse.status);
       if (exercisesResponse.ok) {
         const exercisesResult = await exercisesResponse.json();
         exercises = exercisesResult.exercises || [];
-        console.log('Exercises loaded:', exercises.length);
-      } else {
-        console.error('Failed to load exercises:', await exercisesResponse.text());
       }
 
       // Load reading texts
-      console.log('Fetching reading texts...');
       const readingTextsResponse = await fetch(`/api/reading-texts?classId=${classId}`, {
         headers: {
           'Authorization': `Bearer ${$authStore.token}`,
@@ -145,28 +143,16 @@
         }
       });
 
-      console.log('Reading texts response status:', readingTextsResponse.status);
       if (readingTextsResponse.ok) {
         const readingTextsResult = await readingTextsResponse.json();
         readingTexts = readingTextsResult.readingTexts || [];
-        console.log('Reading texts loaded:', readingTexts.length);
-      } else {
-        console.error('Failed to load reading texts:', await readingTextsResponse.text());
       }
 
     } catch (err) {
       console.error('Error loading class data:', err);
       error = 'Failed to load class data';
     } finally {
-      console.log('Class data loading completed');
       loading = false;
-      // Force loading to false after 10 seconds as fallback
-      setTimeout(() => {
-        if (loading) {
-          console.log('Force setting loading to false after timeout');
-          loading = false;
-        }
-      }, 10000);
     }
   }
 
@@ -178,11 +164,45 @@
     goto(`/classes/${$page.params.id}`);
   }
 
+  async function deleteClass() {
+    if (!classData) return;
+
+    confirmDialogProps = {
+      title: 'Delete Class',
+      message: `Are you sure you want to delete class "${classData.name}"? This action cannot be undone.`,
+      confirmText: 'Permanently Delete',
+      onConfirm: async () => {
+        try {
+          isConfirmLoading = true;
+          const response = await fetch(`/api/classes/${$page.params.id}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${$authStore.token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (response.ok) {
+            goto('/my-classes');
+          } else {
+            const errorData = await response.json();
+            alert(`Failed to delete class: ${errorData.error}`);
+            isConfirmLoading = false;
+          }
+        } catch (err: any) {
+          console.error('Error deleting class:', err);
+          alert(`Failed to delete class: ${err.message}`);
+          isConfirmLoading = false;
+        }
+      }
+    };
+    showConfirmDialog = true;
+  }
+
   async function loadAllStudents() {
     try {
       loadingStudents = true;
       addStudentError = '';
-      console.log('Loading all students...');
       const response = await fetch('/api/users?role=STUDENT', {
         headers: {
           'Authorization': `Bearer ${$authStore.token}`,
@@ -190,17 +210,11 @@
         }
       });
 
-      console.log('All students response status:', response.status);
       if (response.ok) {
         const data = await response.json();
         allStudents = data.users || [];
-        console.log('All students loaded:', allStudents.length);
-        if (allStudents.length > 0) {
-          console.log('Sample student data:', allStudents[0]);
-        }
       } else {
         const errorText = await response.text();
-        console.error('Failed to load all students:', response.status, errorText);
         let errorMessage = 'Failed to load students';
         try {
           const errorData = JSON.parse(errorText);
@@ -221,14 +235,12 @@
   }
 
   async function addStudent() {
-    console.log('Add Student button clicked');
     showAddStudentModal = true;
     addStudentError = '';
     selectedStudents = [];
-    
+
     // Reload students list to ensure we have the latest data
     await loadAllStudents();
-    console.log('Modal should be open now:', showAddStudentModal);
   }
 
   async function handleAddStudent() {
@@ -301,15 +313,6 @@
   function deselectAllStudents() {
     selectedStudents = [];
   }
-
-  // Debug reactive statements
-  $: console.log('Loading state changed:', loading);
-  $: console.log('Show add student modal:', showAddStudentModal);
-  $: console.log('Show remove confirm modal:', showRemoveConfirmModal);
-  $: console.log('Show create group modal:', showCreateGroupModal);
-  $: console.log('Students count:', students.length);
-  $: console.log('All students count:', allStudents.length);
-  $: console.log('Groups count:', groups.length);
 
   // Computed property for filtered students
   $: filteredStudents = (allStudents || []).filter(student => {
@@ -417,12 +420,20 @@
     resetCreateStudentForm();
   }
 
-  function createExercise() {
-    goto(`/exercises/create?classId=${$page.params.id}`);
+  function createExercise(lessonId?: string) {
+    const classId = $page.params.id;
+    if (!classId) return;
+    const params = new URLSearchParams({ classId });
+    if (lessonId) params.set('lessonId', lessonId);
+    goto(`/exercises/create?${params.toString()}`);
   }
 
-  function createReadingText() {
-    goto(`/reading-texts/create?classId=${$page.params.id}`);
+  function createReadingText(lessonId?: string) {
+    const classId = $page.params.id;
+    if (!classId) return;
+    const params = new URLSearchParams({ classId });
+    if (lessonId) params.set('lessonId', lessonId);
+    goto(`/reading-texts/create?${params.toString()}`);
   }
 
   async function loadGroups() {
@@ -443,17 +454,119 @@
     }
   }
 
-  function openCreateGroupModal() {
-    console.log('Opening create group modal');
+  async function loadLessons() {
+    try {
+      const response = await fetch(`/api/lessons?classId=${$page.params.id}`, {
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        lessons = data.lessons || [];
+      }
+    } catch (err) {
+      console.error('Error loading lessons:', err);
+    }
+  }
+
+  function openCreateLessonModal() {
+    showCreateLessonModal = true;
+    createLessonForm = { title: '', description: '' };
+    createLessonError = '';
+  }
+
+  function closeCreateLessonModal() {
+    showCreateLessonModal = false;
+    createLessonForm = { title: '', description: '' };
+    createLessonError = '';
+  }
+
+  async function handleCreateLesson() {
+    if (!createLessonForm.title.trim()) {
+      createLessonError = 'Lesson title is required';
+      return;
+    }
+
+    try {
+      createLessonLoading = true;
+      createLessonError = '';
+
+      const response = await fetch('/api/lessons', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          classId: $page.params.id,
+          title: createLessonForm.title,
+          description: createLessonForm.description || null
+        })
+      });
+
+      if (response.ok) {
+        await loadLessons();
+        closeCreateLessonModal();
+      } else {
+        const data = await response.json();
+        createLessonError = data.error || 'Failed to create lesson';
+      }
+    } catch (err) {
+      console.error('Create lesson error:', err);
+      createLessonError = 'Failed to create lesson';
+    } finally {
+      createLessonLoading = false;
+    }
+  }
+
+  async function deleteLesson(lessonId: string) {
+    confirmDialogProps = {
+      title: 'Delete Lesson',
+      message: 'Are you sure you want to delete this lesson? All reading texts and exercises in this lesson will also be deleted.',
+      confirmText: 'Delete Lesson',
+      onConfirm: async () => {
+        try {
+          isConfirmLoading = true;
+          const response = await fetch(`/api/lessons?id=${lessonId}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${$authStore.token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (response.ok) {
+            await loadLessons();
+            await loadClassData();
+            showConfirmDialog = false;
+          } else {
+            alert('Failed to delete lesson');
+          }
+        } catch (err) {
+          console.error('Delete lesson error:', err);
+          alert('Failed to delete lesson');
+        } finally {
+          isConfirmLoading = false;
+        }
+      }
+    };
+    showConfirmDialog = true;
+  }
+
+  function openCreateGroupModal(lessonId?: string) {
     showCreateGroupModal = true;
+    createGroupForLessonId = lessonId || null;
     createGroupForm = { name: '', description: '' };
     selectedStudentsForGroup = [];
     createGroupError = '';
-    console.log('showCreateGroupModal:', showCreateGroupModal);
   }
 
   function closeCreateGroupModal() {
     showCreateGroupModal = false;
+    createGroupForLessonId = null;
     createGroupForm = { name: '', description: '' };
     selectedStudentsForGroup = [];
     createGroupError = '';
@@ -477,6 +590,7 @@
         },
         body: JSON.stringify({
           classId: $page.params.id,
+          lessonId: createGroupForLessonId,
           name: createGroupForm.name,
           description: createGroupForm.description || null,
           studentIds: selectedStudentsForGroup
@@ -485,6 +599,7 @@
 
       if (response.ok) {
         await loadGroups();
+        await loadLessons();
         closeCreateGroupModal();
       } else {
         const data = await response.json();
@@ -503,6 +618,72 @@
       selectedStudentsForGroup = selectedStudentsForGroup.filter(id => id !== studentId);
     } else {
       selectedStudentsForGroup = [...selectedStudentsForGroup, studentId];
+    }
+  }
+
+  function openAddMemberModal(group: any) {
+    selectedGroup = group;
+    selectedStudentsForGroup = [];
+    showAddMemberModal = true;
+  }
+
+  function closeAddMemberModal() {
+    selectedGroup = null;
+    selectedStudentsForGroup = [];
+    showAddMemberModal = false;
+  }
+
+  async function handleAddGroupMembers() {
+    if (!selectedGroup || selectedStudentsForGroup.length === 0) return;
+
+    try {
+      const promises = selectedStudentsForGroup.map(studentId =>
+        fetch(`/api/groups/${selectedGroup.id}/members`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${$authStore.token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ studentId })
+        })
+      );
+
+      const results = await Promise.all(promises);
+      const failed = results.filter(r => !r.ok);
+
+      if (failed.length > 0) {
+        alert(`Failed to add ${failed.length} member(s)`);
+      }
+
+      await loadGroups();
+      await loadLessons();
+      closeAddMemberModal();
+    } catch (err) {
+      console.error('Add group members error:', err);
+      alert('Failed to add members');
+    }
+  }
+
+  async function handleRemoveGroupMember(groupId: string, studentId: string) {
+    try {
+      const response = await fetch(`/api/groups/${groupId}/members?studentId=${studentId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        await loadGroups();
+        await loadLessons();
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Failed to remove member');
+      }
+    } catch (err) {
+      console.error('Remove group member error:', err);
+      alert('Failed to remove member');
     }
   }
 
@@ -563,29 +744,37 @@
     }
   }
 
-  async function handleDeleteGroup(groupId: string) {
-    if (!confirm('Are you sure you want to delete this group?')) {
-      return;
-    }
+  async function deleteGroup(groupId: string) {
+    confirmDialogProps = {
+      title: 'Delete Group',
+      message: 'Are you sure you want to delete this group?',
+      confirmText: 'Delete Group',
+      onConfirm: async () => {
+        try {
+          isConfirmLoading = true;
+          const response = await fetch(`/api/groups/${groupId}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${$authStore.token}`,
+              'Content-Type': 'application/json'
+            }
+          });
 
-    try {
-      const response = await fetch(`/api/groups/${groupId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${$authStore.token}`,
-          'Content-Type': 'application/json'
+          if (response.ok) {
+            await loadGroups();
+            showConfirmDialog = false;
+          } else {
+            alert('Failed to delete group');
+          }
+        } catch (err) {
+          console.error('Delete group error:', err);
+          alert('Failed to delete group');
+        } finally {
+          isConfirmLoading = false;
         }
-      });
-
-      if (response.ok) {
-        await loadGroups();
-      } else {
-        alert('Failed to delete group');
       }
-    } catch (err) {
-      console.error('Delete group error:', err);
-      alert('Failed to delete group');
-    }
+    };
+    showConfirmDialog = true;
   }
 
   function viewReadingText(textId: string) {
@@ -643,17 +832,10 @@
   }
 
   function removeStudent(studentId: string) {
-    console.log('Remove Student button clicked for:', studentId);
-    console.log('Current loading state:', loading);
-    console.log('Current students:', students.length);
     const student = students.find(s => s.student.id === studentId);
-    console.log('Found student:', student);
     if (student) {
       studentToRemove = student.student;
       showRemoveConfirmModal = true;
-      console.log('Remove modal should be open now:', showRemoveConfirmModal);
-    } else {
-      console.error('Student not found for ID:', studentId);
     }
   }
 
@@ -698,11 +880,36 @@
     studentToRemove = null;
   }
 
+  function getScheduleStatus(text: any): 'scheduled' | 'open' | 'closed' | 'active' {
+    if (!text.openAt && !text.closeAt) return 'active';
+    const now = new Date();
+    if (text.openAt && now < new Date(text.openAt)) return 'scheduled';
+    if (text.closeAt && now > new Date(text.closeAt)) return 'closed';
+    return 'open';
+  }
+
+  function formatScheduleDate(dateStr: string): string {
+    return new Date(dateStr).toLocaleString('id-ID', {
+      day: 'numeric', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+  }
+
 </script>
 
 <svelte:head>
   <title>Manage Class - {classData?.name || 'Loading...'} - IDEA</title>
 </svelte:head>
+
+<ConfirmDialog 
+  show={showConfirmDialog}
+  title={confirmDialogProps.title}
+  message={confirmDialogProps.message}
+  confirmText={confirmDialogProps.confirmText}
+  loading={isConfirmLoading}
+  on:confirm={confirmDialogProps.onConfirm}
+  on:cancel={() => showConfirmDialog = false}
+/>
 
 {#if loading}
   <div class="min-h-screen flex items-center justify-center bg-gray-50">
@@ -730,7 +937,7 @@
             <div class="flex items-center min-w-0 flex-1">
               <div class="mr-2 sm:mr-4 flex-shrink-0">
               <Button variant="secondary" size="sm" on:click={goBack}>
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-4 h-4 mr-0 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                 </svg>
                   <span class="hidden sm:inline">Back</span>
@@ -741,15 +948,25 @@
                 <p class="text-xs sm:text-sm text-gray-500 truncate">{classData.name}</p>
             </div>
           </div>
-            <div class="flex-shrink-0">
+            <div class="flex flex-shrink-0 items-center gap-2">
               <Button variant="secondary" size="sm" on:click={goToView}>
-              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              </svg>
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
                 <span class="hidden sm:inline">View Class</span>
                 <span class="sm:hidden">View</span>
-            </Button>
+              </Button>
+              <button 
+                class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 shadow-sm transition-colors duration-150"
+                on:click={deleteClass}
+              >
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                <span class="hidden sm:inline">Delete Class</span>
+                <span class="sm:hidden">Delete</span>
+              </button>
             </div>
           </div>
         </div>
@@ -799,6 +1016,10 @@
                 <dd class="text-sm font-semibold text-gray-900">{students.length}</dd>
               </div>
               <div class="grid grid-cols-[minmax(0,7.5rem)_1fr] gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+                <dt class="text-sm font-medium text-gray-500">Lessons</dt>
+                <dd class="text-sm font-semibold text-gray-900">{lessons.length}</dd>
+              </div>
+              <div class="grid grid-cols-[minmax(0,7.5rem)_1fr] gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
                 <dt class="text-sm font-medium text-gray-500">Exit Tickets</dt>
                 <dd class="text-sm font-semibold text-gray-900">{exercises.length}</dd>
               </div>
@@ -822,17 +1043,24 @@
                 </svg>
                 Add Student
               </Button>
-              <Button variant="secondary" size="sm" fullWidth on:click={createExercise}>
+              <Button variant="secondary" size="sm" fullWidth on:click={() => createExercise()}>
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 Create Exit Ticket
               </Button>
-              <Button variant="secondary" size="sm" fullWidth on:click={createReadingText}>
+              <Button variant="secondary" size="sm" fullWidth on:click={() => createReadingText()}>
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                 </svg>
                 Add Reading Text
+              </Button>
+              <Button variant="secondary" size="sm" fullWidth on:click={() => goto('/dashboard')}>
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z" />
+                </svg>
+                Back to Dashboard
               </Button>
             </div>
           </div>
@@ -848,6 +1076,14 @@
               on:click={() => activeTab = 'overview'}
             >
               Overview
+            </button>
+            <button
+              class="py-3 sm:py-4 px-2 sm:px-1 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap flex-shrink-0 {activeTab === 'lessons' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
+              on:click={() => activeTab = 'lessons'}
+            >
+              <span class="inline sm:hidden">Meet </span>
+              <span class="hidden sm:inline">Lessons </span>
+              <span class="text-primary-600 font-semibold">({lessons.length})</span>
             </button>
             <button
               class="py-3 sm:py-4 px-2 sm:px-1 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap flex-shrink-0 {activeTab === 'students' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
@@ -940,6 +1176,198 @@
               </div>
             </div>
 
+          {:else if activeTab === 'lessons'}
+            <!-- Lessons Tab -->
+            <div class="space-y-4">
+              <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                <h3 class="text-base sm:text-lg font-medium text-gray-900">Lessons ({lessons.length})</h3>
+                <Button variant="primary" size="sm" on:click={openCreateLessonModal}>
+                  <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  Add Lesson
+                </Button>
+              </div>
+
+              {#if lessons.length > 0}
+                <div class="space-y-4">
+                  {#each lessons as lesson}
+                    <div class="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow">
+                      <!-- Lesson Header -->
+                      <div class="p-4 bg-gray-50 border-b border-gray-200">
+                        <div class="flex items-center justify-between">
+                          <div class="flex items-center">
+                            <div class="h-8 w-8 bg-primary-100 rounded-lg flex items-center justify-center mr-3 flex-shrink-0">
+                              <svg class="w-4 h-4 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                              </svg>
+                            </div>
+                            <div>
+                              <h4 class="text-sm font-medium text-gray-900">{lesson.title}</h4>
+                              {#if lesson.description}
+                                <p class="text-xs text-gray-500 mt-0.5">{lesson.description}</p>
+                              {/if}
+                            </div>
+                          </div>
+                          <div class="flex items-center space-x-2">
+                            <button
+                              class="text-primary-600 hover:text-primary-900 text-xs"
+                              on:click={() => createReadingText(lesson.id)}
+                            >+ Reading</button>
+                            <button
+                              class="text-primary-600 hover:text-primary-900 text-xs"
+                              on:click={() => createExercise(lesson.id)}
+                            >+ Ticket</button>
+                            <button
+                              class="text-purple-600 hover:text-purple-900 text-xs"
+                              on:click={() => openCreateGroupModal(lesson.id)}
+                            >+ Group</button>
+                            <button
+                              class="text-red-600 hover:text-red-900 text-xs"
+                              on:click={() => deleteLesson(lesson.id)}
+                            >Delete</button>
+                          </div>
+                        </div>
+                        <div class="flex items-center space-x-4 mt-2 text-xs text-gray-500">
+                          <span>{lesson._count?.readingTexts || 0} reading text(s)</span>
+                          <span>{lesson._count?.exercises || 0} exit ticket(s)</span>
+                          <span>{lesson._count?.groups || 0} group(s)</span>
+                        </div>
+                      </div>
+
+                      <!-- Lesson Contents: Group -> Reading Text -> Exit Tickets -->
+                      <div class="p-4">
+                        {#if groups.filter((g: any) => g.lessonId === lesson.id).length > 0 || readingTexts.filter((t: any) => t.lessonId === lesson.id && !t.groupId).length > 0 || exercises.filter((e: any) => e.lessonId === lesson.id).length > 0}
+                          <div class="space-y-3">
+                            {#each groups.filter((g: any) => g.lessonId === lesson.id) as group}
+                              <!-- Group Section -->
+                              <div class="border border-purple-200 rounded-lg overflow-hidden">
+                                <div class="flex items-center justify-between p-2 bg-purple-50">
+                                  <div class="flex items-center min-w-0 flex-1">
+                                    <svg class="w-4 h-4 text-purple-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                    </svg>
+                                    <span class="text-xs font-medium text-gray-700 truncate">{group.name}</span>
+                                    <span class="text-xs text-gray-400 ml-2">{group._count?.members || 0} member(s)</span>
+                                  </div>
+                                  <div class="flex items-center space-x-2 ml-2">
+                                    <button class="text-blue-600 hover:text-blue-900 text-xs" on:click={() => openAddMemberModal(group)}>+ Member</button>
+                                    <button class="text-red-600 hover:text-red-900 text-xs" on:click={() => deleteGroup(group.id)}>Del</button>
+                                  </div>
+                                </div>
+                                <!-- Group Members -->
+                                {#if group.members && group.members.length > 0}
+                                  <div class="px-3 py-2 bg-white border-t border-purple-100">
+                                    <div class="flex flex-wrap gap-1">
+                                      {#each group.members as member}
+                                        <span class="inline-flex items-center text-[10px] bg-gray-100 text-gray-600 rounded-full px-2 py-0.5">
+                                          {member.student?.firstName} {member.student?.lastName}
+                                          <button
+                                            class="ml-1 text-red-400 hover:text-red-600"
+                                            on:click={() => handleRemoveGroupMember(group.id, member.studentId)}
+                                            title="Remove member"
+                                          >x</button>
+                                        </span>
+                                      {/each}
+                                    </div>
+                                  </div>
+                                {/if}
+                                <!-- Group Reading Texts & Exit Tickets -->
+                                {#if readingTexts.filter((t: any) => t.groupId === group.id).length > 0 || exercises.filter((e: any) => e.lessonId === lesson.id && readingTexts.filter((t: any) => t.groupId === group.id).some((t: any) => t.id === e.readingTextId)).length > 0}
+                                  <div class="px-3 py-2 bg-white border-t border-purple-100 space-y-1">
+                                    {#each readingTexts.filter((t: any) => t.groupId === group.id) as text}
+                                      {@const sStatus = getScheduleStatus(text)}
+                                      <div class="flex items-center justify-between p-1.5 bg-blue-50 rounded">
+                                        <div class="flex items-center min-w-0 flex-1">
+                                          <svg class="w-3 h-3 text-blue-500 mr-1.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                          </svg>
+                                          <span class="text-[11px] text-gray-700 truncate">{text.title}</span>
+                                          {#if sStatus === 'scheduled'}
+                                            <span class="ml-1 text-[9px] text-yellow-700 bg-yellow-100 px-1 rounded">Scheduled</span>
+                                          {:else if sStatus === 'closed'}
+                                            <span class="ml-1 text-[9px] text-red-700 bg-red-100 px-1 rounded">Closed</span>
+                                          {/if}
+                                        </div>
+                                        <div class="flex space-x-1 ml-1">
+                                          <button class="text-blue-600 hover:text-blue-900 text-[10px]" on:click={() => viewReadingText(text.id)}>View</button>
+                                          <button class="text-red-600 hover:text-red-900 text-[10px]" on:click={() => deleteReadingText(text.id)}>Del</button>
+                                        </div>
+                                      </div>
+                                    {/each}
+                                    <!-- Group Exit Tickets -->
+                                    {#each exercises.filter((e: any) => e.lessonId === lesson.id && readingTexts.filter((t: any) => t.groupId === group.id).some((t: any) => t.id === e.readingTextId)) as exercise}
+                                      <div class="flex items-center justify-between p-1.5 bg-yellow-50 rounded">
+                                        <div class="flex items-center min-w-0 flex-1">
+                                          <svg class="w-3 h-3 text-yellow-500 mr-1.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                          </svg>
+                                          <span class="text-[11px] text-gray-700 truncate">{exercise.title}</span>
+                                        </div>
+                                        <span class="text-[10px] text-gray-400 ml-1">{exercise._count?.submissions || 0} subs</span>
+                                      </div>
+                                    {/each}
+                                  </div>
+                                {/if}
+                              </div>
+                            {/each}
+
+                            <!-- Ungrouped Reading Texts -->
+                            {#each readingTexts.filter((t: any) => t.lessonId === lesson.id && !t.groupId) as text}
+                              {@const sStatus = getScheduleStatus(text)}
+                              <div class="flex items-center justify-between p-2 bg-blue-50 rounded-md">
+                                <div class="flex items-center min-w-0 flex-1">
+                                  <svg class="w-4 h-4 text-blue-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                  </svg>
+                                  <span class="text-xs text-gray-700 truncate">{text.title}</span>
+                                  {#if sStatus === 'scheduled'}
+                                    <span class="ml-2 text-[10px] text-yellow-700 bg-yellow-100 px-1 rounded">Scheduled</span>
+                                  {:else if sStatus === 'closed'}
+                                    <span class="ml-2 text-[10px] text-red-700 bg-red-100 px-1 rounded">Closed</span>
+                                  {/if}
+                                </div>
+                                <div class="flex space-x-2 ml-2">
+                                  <button class="text-blue-600 hover:text-blue-900 text-xs" on:click={() => viewReadingText(text.id)}>View</button>
+                                  <button class="text-red-600 hover:text-red-900 text-xs" on:click={() => deleteReadingText(text.id)}>Del</button>
+                                </div>
+                              </div>
+                            {/each}
+
+                            <!-- Ungrouped Exit Tickets (not linked to any group's reading text) -->
+                            {#each exercises.filter((e: any) => e.lessonId === lesson.id && !readingTexts.some((t: any) => t.groupId && t.lessonId === lesson.id && t.id === e.readingTextId)) as exercise}
+                              <div class="flex items-center justify-between p-2 bg-yellow-50 rounded-md">
+                                <div class="flex items-center min-w-0 flex-1">
+                                  <svg class="w-4 h-4 text-yellow-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                  </svg>
+                                  <span class="text-xs text-gray-700 truncate">{exercise.title}</span>
+                                </div>
+                                <span class="text-xs text-gray-500">{exercise._count?.submissions || 0} subs</span>
+                              </div>
+                            {/each}
+                          </div>
+                        {:else}
+                          <p class="text-xs text-gray-400 text-center py-2">No content yet. Use + Reading, + Group, or + Ticket to add.</p>
+                        {/if}
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              {:else}
+                <div class="text-center py-8">
+                  <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                  </svg>
+                  <h3 class="mt-2 text-sm font-medium text-gray-900">No lessons yet</h3>
+                  <p class="mt-1 text-sm text-gray-500">Create lessons/pertemuan to organize reading texts and exit tickets.</p>
+                  <div class="mt-6">
+                    <Button variant="primary" size="sm" on:click={openCreateLessonModal}>Add Lesson</Button>
+                  </div>
+                </div>
+              {/if}
+            </div>
+
           {:else if activeTab === 'students'}
             <!-- Students Tab -->
             <div class="space-y-4">
@@ -1028,7 +1456,7 @@
             <div class="space-y-4">
               <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
                 <h3 class="text-base sm:text-lg font-medium text-gray-900">Exit Tickets ({exercises.length})</h3>
-                <Button variant="primary" size="sm" on:click={createExercise}>
+                <Button variant="primary" size="sm" on:click={() => createExercise()}>
                   <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                   </svg>
@@ -1037,9 +1465,8 @@
               </div>
               
               {#if exercises.length > 0}
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {#each exercises as exercise}
-                    <div class="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                {#snippet exerciseCard(exercise: any)}
+                    <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-1 hover:border-primary-200 transition-all duration-200">
                       <h4 class="text-sm font-medium text-gray-900 mb-2">{exercise.title}</h4>
                       <p class="text-xs text-gray-500 mb-3">{exercise.description || 'No description'}</p>
                       <div class="flex justify-between items-center">
@@ -1047,12 +1474,55 @@
                           {new Date(exercise.createdAt).toLocaleDateString()}
                         </span>
                         <div class="flex space-x-2">
-                          <button class="text-primary-600 hover:text-primary-900 text-xs">Edit</button>
-                          <button class="text-red-600 hover:text-red-900 text-xs">Delete</button>
+                          <Button variant="secondary" size="sm" on:click={() => goto(`/submissions/${exercise.id}`)}>
+                            <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                            View
+                          </Button>
+                          <Button variant="primary" size="sm" on:click={() => goto(`/exercises/${exercise.id}/edit`)}>
+                            <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                            Edit
+                          </Button>
+                          <Button variant="danger" size="sm">
+                            <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            Delete
+                          </Button>
                         </div>
                       </div>
                     </div>
+                {/snippet}
+
+                <div class="space-y-8">
+                  {#each lessons as lesson}
+                    {@const lessonExercises = exercises.filter((e: any) => e.lessonId === lesson.id)}
+                    {#if lessonExercises.length > 0}
+                      <div>
+                        <div class="flex items-center mb-4">
+                          <h4 class="text-md font-semibold text-gray-800">{lesson.title}</h4>
+                          <div class="ml-4 flex-grow border-t border-gray-200"></div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {#each lessonExercises as exercise}
+                            {@render exerciseCard(exercise)}
+                          {/each}
+                        </div>
+                      </div>
+                    {/if}
                   {/each}
+
+                  {#if exercises.some((e: any) => !e.lessonId)}
+                    {@const unassignedExercises = exercises.filter((e: any) => !e.lessonId)}
+                    <div>
+                      <div class="flex items-center mb-4">
+                        <h4 class="text-md font-semibold text-gray-800">Class-wide Exit Tickets</h4>
+                        <div class="ml-4 flex-grow border-t border-gray-200"></div>
+                      </div>
+                      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {#each unassignedExercises as exercise}
+                          {@render exerciseCard(exercise)}
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
                 </div>
               {:else}
                 <div class="text-center py-8">
@@ -1062,7 +1532,7 @@
                   <h3 class="mt-2 text-sm font-medium text-gray-900">No exit tickets</h3>
                   <p class="mt-1 text-sm text-gray-500">Create your first exit ticket for this class.</p>
                   <div class="mt-6">
-                    <Button variant="primary" size="sm" on:click={createExercise}>
+                    <Button variant="primary" size="sm" on:click={() => createExercise()}>
                       Create Exit Ticket
                     </Button>
                   </div>
@@ -1075,7 +1545,7 @@
             <div class="space-y-4">
               <div class="flex justify-between items-center">
                 <h3 class="text-lg font-medium text-gray-900">Reading Texts ({readingTexts.length})</h3>
-                <Button variant="primary" size="sm" on:click={createReadingText}>
+                <Button variant="primary" size="sm" on:click={() => createReadingText()}>
                   <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                   </svg>
@@ -1084,24 +1554,57 @@
               </div>
               
               {#if readingTexts.length > 0}
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {#each readingTexts as text}
-                    <div class="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                {#snippet readingTextCard(text: any)}
+                    {@const scheduleStatus = getScheduleStatus(text)}
+                    <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-1 hover:border-primary-200 transition-all duration-200">
                       <div class="flex items-start justify-between mb-2">
                         <div class="flex-1">
                           <h4 class="text-sm font-medium text-gray-900 mb-1">{text.title}</h4>
                           <p class="text-xs text-gray-500 mb-1">{text.author || 'Unknown author'}</p>
-                          {#if text.group}
-                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary-100 text-primary-800">
-                              <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                              </svg>
-                              {text.group.name}
-                            </span>
-                          {:else}
-                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
-                              Class-wide
-                            </span>
+                          <div class="flex flex-wrap gap-1">
+                            {#if text.group}
+                              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary-100 text-primary-800">
+                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                </svg>
+                                {text.group.name}
+                              </span>
+                            {:else}
+                              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+                                Class-wide
+                              </span>
+                            {/if}
+                            {#if scheduleStatus === 'scheduled'}
+                              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Scheduled
+                              </span>
+                            {:else if scheduleStatus === 'closed'}
+                              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Closed
+                              </span>
+                            {:else if scheduleStatus === 'open'}
+                              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Open
+                              </span>
+                            {/if}
+                          </div>
+                          {#if scheduleStatus === 'scheduled' && text.openAt}
+                            <p class="text-[10px] text-gray-400 mt-1">Opens: {formatScheduleDate(text.openAt)}</p>
+                          {/if}
+                          {#if scheduleStatus === 'open' && text.closeAt}
+                            <p class="text-[10px] text-gray-400 mt-1">Closes: {formatScheduleDate(text.closeAt)}</p>
+                          {/if}
+                          {#if scheduleStatus === 'closed' && text.closeAt}
+                            <p class="text-[10px] text-gray-400 mt-1">Closed: {formatScheduleDate(text.closeAt)}</p>
                           {/if}
                         </div>
                       </div>
@@ -1110,13 +1613,55 @@
                           {new Date(text.createdAt).toLocaleDateString()}
                         </span>
                         <div class="flex space-x-2">
-                          <button class="text-blue-600 hover:text-blue-900 text-xs" on:click={() => viewReadingText(text.id)}>View</button>
-                          <button class="text-primary-600 hover:text-primary-900 text-xs" on:click={() => editReadingText(text.id)}>Edit</button>
-                          <button class="text-red-600 hover:text-red-900 text-xs" on:click={() => deleteReadingText(text.id)}>Delete</button>
+                          <Button variant="secondary" size="sm" on:click={() => viewReadingText(text.id)}>
+                            <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                            View
+                          </Button>
+                          <Button variant="primary" size="sm" on:click={() => editReadingText(text.id)}>
+                            <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                            Edit
+                          </Button>
+                          <Button variant="danger" size="sm" on:click={() => deleteReadingText(text.id)}>
+                            <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            Delete
+                          </Button>
                         </div>
                       </div>
                     </div>
+                {/snippet}
+
+                <div class="space-y-8">
+                  {#each lessons as lesson}
+                    {@const lessonTexts = readingTexts.filter((t: any) => t.lessonId === lesson.id)}
+                    {#if lessonTexts.length > 0}
+                      <div>
+                        <div class="flex items-center mb-4">
+                          <h4 class="text-md font-semibold text-gray-800">{lesson.title}</h4>
+                          <div class="ml-4 flex-grow border-t border-gray-200"></div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {#each lessonTexts as text}
+                            {@render readingTextCard(text)}
+                          {/each}
+                        </div>
+                      </div>
+                    {/if}
                   {/each}
+
+                  {#if readingTexts.some((t: any) => !t.lessonId)}
+                    {@const unassignedTexts = readingTexts.filter((t: any) => !t.lessonId)}
+                    <div>
+                      <div class="flex items-center mb-4">
+                        <h4 class="text-md font-semibold text-gray-800">Class-wide Reading Texts</h4>
+                        <div class="ml-4 flex-grow border-t border-gray-200"></div>
+                      </div>
+                      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {#each unassignedTexts as text}
+                          {@render readingTextCard(text)}
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
                 </div>
               {:else}
                 <div class="text-center py-8">
@@ -1126,7 +1671,7 @@
                   <h3 class="mt-2 text-sm font-medium text-gray-900">No reading texts</h3>
                   <p class="mt-1 text-sm text-gray-500">Add reading materials for this class.</p>
                   <div class="mt-6">
-                    <Button variant="primary" size="sm" on:click={createReadingText}>
+                    <Button variant="primary" size="sm" on:click={() => createReadingText()}>
                       Add Reading Text
                     </Button>
                   </div>
@@ -1140,7 +1685,6 @@
               <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
                 <h3 class="text-base sm:text-lg font-medium text-gray-900">Groups ({groups.length})</h3>
                 <Button variant="primary" size="sm" on:click={() => {
-                  console.log('Create Group button clicked');
                   openCreateGroupModal();
                 }}>
                   <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1151,9 +1695,8 @@
               </div>
               
               {#if groups.length > 0}
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {#each groups as group}
-                    <div class="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                {#snippet groupCard(group: any)}
+                    <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-1 hover:border-primary-200 transition-all duration-200">
                       <div class="flex items-start justify-between mb-3">
                         <div class="flex-1">
                           <h4 class="text-sm font-medium text-gray-900 mb-1">{group.name}</h4>
@@ -1163,7 +1706,7 @@
         </div>
                         <button
                           class="text-red-600 hover:text-red-900 text-xs ml-2"
-                          on:click={() => handleDeleteGroup(group.id)}
+                          on:click={() => deleteGroup(group.id)}
                         >
                           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -1247,7 +1790,40 @@
                         </Button>
                       </div>
                     </div>
+                {/snippet}
+
+                <div class="space-y-8">
+                  {#each lessons as lesson}
+                    {@const lessonGroups = groups.filter((g: any) => g.lessonId === lesson.id)}
+                    {#if lessonGroups.length > 0}
+                      <div>
+                        <div class="flex items-center mb-4">
+                          <h4 class="text-md font-semibold text-gray-800">{lesson.title}</h4>
+                          <div class="ml-4 flex-grow border-t border-gray-200"></div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {#each lessonGroups as group}
+                            {@render groupCard(group)}
+                          {/each}
+                        </div>
+                      </div>
+                    {/if}
                   {/each}
+
+                  {#if groups.some((g: any) => !g.lessonId)}
+                    {@const unassignedGroups = groups.filter((g: any) => !g.lessonId)}
+                    <div>
+                      <div class="flex items-center mb-4">
+                        <h4 class="text-md font-semibold text-gray-800">Class-wide Groups</h4>
+                        <div class="ml-4 flex-grow border-t border-gray-200"></div>
+                      </div>
+                      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {#each unassignedGroups as group}
+                          {@render groupCard(group)}
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
                 </div>
               {:else}
                 <div class="text-center py-8">
@@ -1258,7 +1834,6 @@
                   <p class="mt-1 text-sm text-gray-500">Create groups to organize students and reading texts.</p>
                   <div class="mt-6">
                     <Button variant="primary" size="sm" on:click={() => {
-                      console.log('Create Group button clicked (empty state)');
                       openCreateGroupModal();
                     }}>
                       Create Group
@@ -1664,6 +2239,86 @@
     </div>
   {/if}
 
+  <!-- Add Member to Group Modal -->
+  {#if showAddMemberModal && selectedGroup}
+    {@const existingMemberIds = (selectedGroup.members || []).map((m: any) => m.studentId)}
+    <div class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" role="dialog" aria-modal="true">
+      <div class="relative top-10 mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-white">
+        <div class="mt-3">
+          <h3 class="text-lg font-medium text-gray-900 mb-1">Add Members to "{selectedGroup.name}"</h3>
+          <p class="text-sm text-gray-500 mb-4">Select students to add to this group.</p>
+
+          <div class="border border-gray-200 rounded-md max-h-64 overflow-y-auto">
+            {#if students.length === 0}
+              <div class="p-4 text-center text-sm text-gray-500">
+                No students enrolled in this class yet
+              </div>
+            {:else}
+              <div class="divide-y divide-gray-200">
+                {#each students as studentItem}
+                  {@const isExisting = existingMemberIds.includes(studentItem.student.id)}
+                  {@const isSelected = selectedStudentsForGroup.includes(studentItem.student.id)}
+                  <div class="p-3 hover:bg-gray-50 {isExisting ? 'bg-green-50' : ''}">
+                    <div class="flex items-center">
+                      {#if isExisting}
+                        <span class="h-4 w-4 flex items-center justify-center text-green-500 mr-0">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                        </span>
+                      {:else}
+                        <input
+                          type="checkbox"
+                          id="add-member-{studentItem.student.id}"
+                          checked={isSelected}
+                          on:change={() => toggleStudentForGroup(studentItem.student.id)}
+                          class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                        />
+                      {/if}
+                      <label for="add-member-{studentItem.student.id}" class="ml-3 flex-1 cursor-pointer">
+                        <div class="text-sm font-medium text-gray-900">
+                          {studentItem.student.firstName} {studentItem.student.lastName}
+                        </div>
+                        <div class="text-xs text-gray-500">
+                          {studentItem.student.email}
+                        </div>
+                      </label>
+                      {#if isExisting}
+                        <button
+                          class="text-red-500 hover:text-red-700 text-xs"
+                          on:click={() => handleRemoveGroupMember(selectedGroup.id, studentItem.student.id)}
+                        >Remove</button>
+                      {/if}
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+          <p class="mt-2 text-xs text-gray-500">
+            {selectedStudentsForGroup.length} new student{selectedStudentsForGroup.length !== 1 ? 's' : ''} selected
+          </p>
+
+          <div class="flex justify-end space-x-3 mt-6">
+            <Button
+              type="button"
+              variant="secondary"
+              on:click={closeAddMemberModal}
+            >
+              Close
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              on:click={handleAddGroupMembers}
+              disabled={selectedStudentsForGroup.length === 0}
+            >
+              Add {selectedStudentsForGroup.length} Member{selectedStudentsForGroup.length !== 1 ? 's' : ''}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   {#if showAssignExistingModal && assignModalGroup}
     <div class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" role="dialog" aria-modal="true">
       <div class="relative top-10 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
@@ -1847,6 +2502,64 @@
       </div>
     </div>
   {/if}
+{/if}
+
+<!-- Create Lesson Modal -->
+{#if showCreateLessonModal}
+  <div class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" role="dialog" aria-modal="true">
+    <div class="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+      <div class="mt-3">
+        <h3 class="text-lg font-medium text-gray-900 mb-4">Create New Lesson</h3>
+
+        {#if createLessonError}
+          <Alert type="error" message={createLessonError} />
+        {/if}
+
+        <div class="space-y-4">
+          <div>
+            <label for="lessonTitle" class="block text-sm font-medium text-gray-700 mb-2">
+              Title <span class="text-red-500">*</span>
+            </label>
+            <input
+              id="lessonTitle"
+              type="text"
+              bind:value={createLessonForm.title}
+              class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              placeholder="e.g. Pertemuan 1 - Introduction"
+              disabled={createLessonLoading}
+            />
+          </div>
+
+          <div>
+            <label for="lessonDescription" class="block text-sm font-medium text-gray-700 mb-2">
+              Description (Optional)
+            </label>
+            <textarea
+              id="lessonDescription"
+              bind:value={createLessonForm.description}
+              rows="3"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              placeholder="Brief description of this lesson"
+              disabled={createLessonLoading}
+            ></textarea>
+          </div>
+        </div>
+
+        <div class="flex justify-end space-x-3 mt-6">
+          <Button type="button" variant="secondary" on:click={closeCreateLessonModal} disabled={createLessonLoading}>Cancel</Button>
+          <Button type="button" variant="primary" on:click={handleCreateLesson} disabled={createLessonLoading || !createLessonForm.title.trim()}>
+            {#if createLessonLoading}
+              <svg class="animate-spin -ml-1 mr-3 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            {/if}
+            {createLessonLoading ? 'Creating...' : 'Create Lesson'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  </div>
 {/if}
 
 <!-- Delete Reading Text Confirmation Modal -->

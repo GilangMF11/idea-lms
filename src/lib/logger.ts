@@ -1,3 +1,5 @@
+import { prisma } from './database.js';
+
 export enum LogLevel {
   ERROR = 'error',
   WARN = 'warn',
@@ -64,6 +66,19 @@ class Logger {
         console.debug(formattedLog);
         break;
     }
+
+    // Asynchronously save to database
+    prisma.systemLog.create({
+      data: {
+        level,
+        message,
+        context: context ? JSON.stringify(context) : null,
+        error: error ? error.stack || error.message : null,
+      }
+    }).catch(err => {
+      // Intentionally swallow to prevent recursive logging loops
+      console.error('Failed to write log to database:', err);
+    });
   }
 
   error(message: string, context?: Record<string, any>, error?: Error): void {

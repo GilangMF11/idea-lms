@@ -26,6 +26,16 @@
   let pdfUploading = false;
   let pdfUploadError = '';
   let pdfInput: HTMLInputElement;
+  let enableSchedule = false;
+  let openAt = '';
+  let closeAt = '';
+
+  function toLocalDatetimeString(dateStr: string): string {
+    const d = new Date(dateStr);
+    const offset = d.getTimezoneOffset();
+    const local = new Date(d.getTime() - offset * 60000);
+    return local.toISOString().slice(0, 16);
+  }
 
   function parseHTMLToBlocks(htmlContent: string) {
     const blocks: any[] = [];
@@ -111,6 +121,13 @@
         contentBlocks = readingText.pdfUrl ? [] : parseHTMLToBlocks(readingText.content || '');
         if (contentBlocks.length === 0 && !readingText.pdfUrl) {
           contentBlocks = [{ type: 'text', content: '' }];
+        }
+
+        // Schedule
+        if (readingText.openAt || readingText.closeAt) {
+          enableSchedule = true;
+          openAt = readingText.openAt ? toLocalDatetimeString(readingText.openAt) : '';
+          closeAt = readingText.closeAt ? toLocalDatetimeString(readingText.closeAt) : '';
         }
       } else {
         error = 'Failed to load reading text';
@@ -272,6 +289,12 @@
       return;
     }
 
+    // Validate schedule
+    if (enableSchedule && openAt && closeAt && new Date(closeAt) <= new Date(openAt)) {
+      error = 'Closing time must be after opening time';
+      return;
+    }
+
     try {
       loading = true;
       error = '';
@@ -302,7 +325,9 @@
           pdfUrl: pdfUrl.trim() || null,
           author: author || null,
           source: source || null,
-          classId
+          classId,
+          openAt: enableSchedule && openAt ? new Date(openAt).toISOString() : null,
+          closeAt: enableSchedule && closeAt ? new Date(closeAt).toISOString() : null
         })
       });
 
@@ -395,13 +420,57 @@
             bind:value={author}
             placeholder="Enter author name"
           />
-          
+
           <FormField
             label="Source"
             type="text"
             bind:value={source}
             placeholder="Enter source or reference"
           />
+        </div>
+
+        <!-- Schedule Section -->
+        <div class="border border-gray-200 rounded-lg p-4 mb-6">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h3 class="text-sm font-medium text-gray-900">Access Schedule (Optional)</h3>
+              <p class="text-xs text-gray-500">Set when the material can be accessed by students</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" bind:checked={enableSchedule} class="sr-only peer" />
+              <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-600"></div>
+              <span class="ml-2 text-sm text-gray-600">{enableSchedule ? 'Active' : 'Inactive'}</span>
+            </label>
+          </div>
+
+          {#if enableSchedule}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+              <div>
+                <label for="editOpenAt" class="block text-sm font-medium text-gray-700 mb-1">
+                  Opening Time
+                </label>
+                <input
+                  id="editOpenAt"
+                  type="datetime-local"
+                  bind:value={openAt}
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                />
+                <p class="mt-1 text-xs text-gray-500">Leave blank = available immediately</p>
+              </div>
+              <div>
+                <label for="editCloseAt" class="block text-sm font-medium text-gray-700 mb-1">
+                  Closing Time
+                </label>
+                <input
+                  id="editCloseAt"
+                  type="datetime-local"
+                  bind:value={closeAt}
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                />
+                <p class="mt-1 text-xs text-gray-500">Leave blank = no time limit</p>
+              </div>
+            </div>
+          {/if}
         </div>
 
         <!-- Rich Content Editor -->

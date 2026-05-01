@@ -9,12 +9,13 @@
     color?: string | null;
     startPos?: number;
     endPos?: number;
+    content?: string;
   }> = [];
 
-  /** Called when user selects text: (selectedText, pageIndex, startOffsetInPage, endOffsetInPage) */
-  export let onTextSelection: ((text: string, pageNum: number, startOffset: number, endOffset: number) => void) | null = null;
-  /** Called when user clicks a highlight: (annotationId: string) */
+  /** Called when user clicks an annotation: (annotationId: string) => void */
   export let onAnnotationClick: ((annotationId: string) => void) | null = null;
+  /** Called when user selects text: (selectedText: string, pageIndex: number, startPos: number, endPos: number) => void */
+  export let onTextSelection: ((selectedText: string, pageIndex: number, startPos: number, endPos: number) => void) | null = null;
 
   let numPages = 0;
   let currentPage = 1;
@@ -23,7 +24,6 @@
   let pdfDoc: any = null;
   let containerEl: HTMLDivElement;
   const pageContainers: Map<number, { canvas: HTMLCanvasElement; textLayerDiv: HTMLDivElement }> = new Map();
-  /** PDF.js module loaded only on client to avoid SSR (DOMMatrix etc.) */
   let pdfjsLib: typeof import('pdfjs-dist') | null = null;
   let resizeObserver: ResizeObserver | null = null;
   let resizeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -31,18 +31,16 @@
   let lastContainerWidth = 0;
   let resizeObserverReady = false;
   let annotationsKey = '';
+  let textSelectionTimeout: ReturnType<typeof setTimeout> | null = null;
 
   const annotationHighlightColors = [
     '#fef3c7', '#e0f2fe', '#ecfeff', '#fce7f3', '#dcfce7'
   ];
 
-  const HIGHLIGHT_ALPHA = 0.45; // semi-transparent so PDF text underneath remains visible
-
   function getAnnotationColor(index: number) {
     return annotationHighlightColors[index % annotationHighlightColors.length];
   }
 
-  /** Convert hex (#rgb or #rrggbb) to rgba with alpha so highlight doesn't cover PDF text */
   function hexToRgba(hex: string, alpha: number): string {
     const m = hex.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
     if (m) {
@@ -154,7 +152,6 @@
       wrapper.dataset.page = String(pageNum);
       wrapper.style.isolation = 'isolate';
 
-      /* Canvas di bawah (tampilan PDF), text layer di atas (seleksi terlihat). Teks di text layer transparan. */
       const pageContent = document.createElement('div');
       pageContent.className = 'pdf-page-content';
       pageContent.style.cssText = `position:relative;width:${viewport.width}px;height:${viewport.height}px;`;
@@ -177,6 +174,8 @@
       textLayerDiv.style.position = 'absolute';
       textLayerDiv.style.left = '0';
       textLayerDiv.style.top = '0';
+      textLayerDiv.style.width = viewport.width + 'px';
+      textLayerDiv.style.height = viewport.height + 'px';
       textLayerDiv.style.overflow = 'clip';
       textLayerDiv.style.pointerEvents = 'auto';
       textLayerDiv.style.userSelect = 'text';
@@ -185,6 +184,7 @@
       textLayerDiv.style.textAlign = 'initial';
       textLayerDiv.style.transformOrigin = '0 0';
       textLayerDiv.style.zIndex = '1';
+      textLayerDiv.style.color = 'transparent';
       pageContent.appendChild(textLayerDiv);
       containerEl.appendChild(wrapper);
 
@@ -213,99 +213,11 @@
           viewport
         });
         await textLayer.render();
-        // Force exact same dimensions as canvas so text overlays pixel-perfect (avoids calc rounding)
-        textLayerDiv.style.width = viewport.width + 'px';
-        textLayerDiv.style.height = viewport.height + 'px';
       }
 
       applyHighlightsOnPage(pageNum, textLayerDiv);
+      applyAnnotationOverlays(pageNum, wrapper as HTMLElement);
     }
-  }
-
-  function normalizeWhitespace(s: string): string {
-    return s.trim().replace(/\s+/g, ' ').toLowerCase();
-  }
-
-  function findTextInFullText(fullText: string, search: string): { start: number; end: number } | null {
-    const searchTrimmed = search.trim();
-    const fullLower = fullText.toLowerCase();
-    const searchLower = searchTrimmed.toLowerCase();
-    const idx = fullLower.indexOf(searchLower);
-    if (idx !== -1) return { start: idx, end: idx + searchTrimmed.length };
-    const searchNorm = normalizeWhitespace(search);
-    if (!searchNorm) return null;
-    const normFullChars: string[] = [];
-    const normToOrigStart: number[] = [];
-    let inSpace = false;
-    for (let i = 0; i < fullText.length; i++) {
-      const isSpace = /\s/.test(fullText[i]);
-      if (isSpace) {
-        if (!inSpace) {
-          normFullChars.push(' ');
-          normToOrigStart.push(i);
-          inSpace = true;
-        }
-      } else {
-        inSpace = false;
-        normFullChars.push(fullText[i].toLowerCase());
-        normToOrigStart.push(i);
-      }
-    }
-    const normFull = normFullChars.join('');
-    const normIdxFound = normFull.indexOf(searchNorm);
-    if (normIdxFound === -1) return null;
-    const normEnd = normIdxFound + searchNorm.length;
-    const origStart = normToOrigStart[normIdxFound] ?? 0;
-    const lastNormIdx = normEnd - 1;
-    const origEnd = lastNormIdx >= 0 && lastNormIdx < normToOrigStart.length
-      ? (normToOrigStart[lastNormIdx] ?? 0) + 1
-      : fullText.length;
-    return { start: origStart, end: Math.min(origEnd, fullText.length) };
-  }
-
-  function offsetToRange(
-    textNodes: Text[],
-    nodeStarts: number[],
-    fullTextLength: number,
-    startOffset: number,
-    endOffset: number
-  ): { startNode: Text; startOff: number; endNode: Text; endOff: number } | null {
-    if (startOffset < 0 || endOffset <= startOffset || startOffset >= fullTextLength) return null;
-    const endOff = Math.min(endOffset, fullTextLength);
-    let startNodeIdx = -1;
-    let startOff = 0;
-    for (let k = 0; k < nodeStarts.length; k++) {
-      const nodeLen = (textNodes[k].textContent || '').length;
-      if (startOffset >= nodeStarts[k] && startOffset < nodeStarts[k] + nodeLen) {
-        startNodeIdx = k;
-        startOff = startOffset - nodeStarts[k];
-        break;
-      }
-    }
-    if (startNodeIdx < 0) return null;
-    let endNodeIdx = startNodeIdx;
-    let endOffInNode = startOff;
-    for (let k = startNodeIdx; k < textNodes.length; k++) {
-      const segStart = nodeStarts[k];
-      const nodeLen = (textNodes[k].textContent || '').length;
-      const segEnd = segStart + nodeLen;
-      if (endOff <= segEnd) {
-        endNodeIdx = k;
-        endOffInNode = endOff - segStart;
-        break;
-      }
-    }
-    const startNode = textNodes[startNodeIdx];
-    const endNode = textNodes[endNodeIdx];
-    if (!startNode || !endNode) return null;
-    const startMax = (startNode.textContent || '').length;
-    const endMax = (endNode.textContent || '').length;
-    return {
-      startNode,
-      startOff: Math.min(startOff, startMax),
-      endNode,
-      endOff: Math.min(Math.max(0, endOffInNode), endMax)
-    };
   }
 
   function applyHighlightsOnPage(pageIndex1Based: number, textLayerDiv: HTMLDivElement) {
@@ -366,6 +278,7 @@
             break;
           }
         }
+
         let endNodeIdx = startNodeIdx;
         let endOff = so + selectedLen;
         for (let k = startNodeIdx; k < textNodes.length; k++) {
@@ -376,6 +289,7 @@
           }
           endOff -= nodeLen;
         }
+
         startNode = textNodes[startNodeIdx];
         endNode = textNodes[endNodeIdx];
         startOffset = Math.min(so, (startNode.textContent || '').length);
@@ -387,122 +301,178 @@
         startOffset,
         endNode,
         endOffset,
-        color: ann.color || getAnnotationColor(i),
+        color: hexToRgba(ann.color || getAnnotationColor(i), 0.45),
         id: ann.id,
         idx
       });
     }
 
-    // Apply highlights in reverse order so earlier offsets don't shift
     for (const r of rangesToApply.sort((a, b) => b.idx - a.idx)) {
-      // surroundContents() only works when the range is inside a single parent.
-      // PDF.js puts each text run in its own span, so we split into one segment per text node.
-      const segments: { node: Text; start: number; end: number }[] = [];
-      if (r.startNode === r.endNode) {
-        segments.push({ node: r.startNode, start: r.startOffset, end: r.endOffset });
-      } else {
-        let foundStart = false;
-        for (let k = 0; k < textNodes.length; k++) {
-          const node = textNodes[k];
-          const len = (node.textContent || '').length;
-          if (node === r.startNode) {
-            foundStart = true;
-            segments.push({ node, start: r.startOffset, end: len });
-          } else if (node === r.endNode) {
-            segments.push({ node, start: 0, end: r.endOffset });
-            break;
-          } else if (foundStart) {
-            segments.push({ node, start: 0, end: len });
-          }
+      try {
+        const range = document.createRange();
+        range.setStart(r.startNode, r.startOffset);
+        range.setEnd(r.endNode, r.endOffset);
+        const span = document.createElement('span');
+        span.className = 'pdf-annotation-marker';
+        span.style.cssText = `background-color: ${r.color}; padding: 0 1px; border-radius: 2px; cursor: pointer;`;
+        span.dataset.annotationId = r.id;
+        if (onAnnotationClick) {
+          span.onclick = (e) => { e.preventDefault(); e.stopPropagation(); onAnnotationClick?.(r.id); };
         }
-      }
-      for (const seg of segments) {
-        if (seg.start >= seg.end) continue;
-        try {
-          const range = document.createRange();
-          range.setStart(seg.node, seg.start);
-          range.setEnd(seg.node, seg.end);
-          const span = document.createElement('span');
-          span.className = 'pdf-annotation-marker';
-          const bg = hexToRgba(r.color, HIGHLIGHT_ALPHA);
-          span.style.cssText = `background-color: ${bg}; padding: 0 1px; border-radius: 2px; cursor: pointer;`;
-          span.dataset.annotationId = r.id;
-          if (onAnnotationClick) {
-            span.onclick = (e) => { e.preventDefault(); e.stopPropagation(); onAnnotationClick?.(r.id); };
-          }
-          range.surroundContents(span);
-        } catch (_) {
-          // ignore single-segment failures (e.g. invalid offset)
-        }
+        range.surroundContents(span);
+      } catch (_) {
+        console.warn('Could not wrap PDF highlight');
       }
     }
   }
 
-  function getPageTextOffsets(textLayer: Element, range: Range): { start: number; end: number } | null {
-    const walker = document.createTreeWalker(textLayer, NodeFilter.SHOW_TEXT);
-    const textNodes: Text[] = [];
-    let n: Node | null;
-    while ((n = walker.nextNode())) textNodes.push(n as Text);
-    let startOffset = -1;
-    let endOffset = -1;
-    let current = 0;
-    for (const node of textNodes) {
-      const len = (node.textContent || '').length;
-      if (node === range.startContainer) startOffset = current + range.startOffset;
-      if (node === range.endContainer) endOffset = current + range.endOffset;
-      current += len;
-    }
-    if (startOffset < 0 || endOffset < 0) return null;
-    return { start: startOffset, end: endOffset };
+  function normalizeWhitespace(s: string): string {
+    return s.trim().replace(/\s+/g, ' ').toLowerCase();
   }
 
-  function handleMouseUp() {
-    if (!onTextSelection) return;
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
-    const range = sel.getRangeAt(0);
-    let startNode: Node = range.startContainer;
-    if (startNode.nodeType !== Node.ELEMENT_NODE && startNode.parentElement) startNode = startNode.parentElement;
-    const pageEl = (startNode as HTMLElement).closest?.('.pdf-page-wrapper') as HTMLElement | null;
-    if (!pageEl?.dataset?.page) return;
-    const pageNum = parseInt(pageEl.dataset.page, 10);
-    if (pageNum < 1) return;
-    const textLayer = pageEl.querySelector('.pdf-text-layer');
-    if (!textLayer) return;
-    const startInLayer = textLayer.contains(range.startContainer);
-    const endInLayer = textLayer.contains(range.endContainer);
-    if (!startInLayer && !endInLayer) return;
-    let text: string;
-    let rangeForOffsets: Range = range;
-    try {
-      const textLayerRange = document.createRange();
-      textLayerRange.selectNodeContents(textLayer);
-      if (startInLayer && endInLayer) {
-        text = range.toString().trim();
+  function findTextInFullText(fullText: string, search: string): { start: number; end: number } | null {
+    const searchTrimmed = search.trim();
+    const fullLower = fullText.toLowerCase();
+    const searchLower = searchTrimmed.toLowerCase();
+    const idx = fullLower.indexOf(searchLower);
+    if (idx !== -1) return { start: idx, end: idx + searchTrimmed.length };
+    const searchNorm = normalizeWhitespace(search);
+    if (!searchNorm) return null;
+    const normFullChars: string[] = [];
+    const normToOrigStart: number[] = [];
+    let inSpace = false;
+    for (let i = 0; i < fullText.length; i++) {
+      const isSpace = /\s/.test(fullText[i]);
+      if (isSpace) {
+        if (!inSpace) {
+          normFullChars.push(' ');
+          normToOrigStart.push(i);
+          inSpace = true;
+        }
       } else {
-        const clone = range.cloneRange();
-        if (range.compareBoundaryPoints(Range.START_TO_START, textLayerRange) < 0) {
-          clone.setStart(textLayerRange.startContainer, textLayerRange.startOffset);
-        }
-        if (range.compareBoundaryPoints(Range.END_TO_END, textLayerRange) > 0) {
-          clone.setEnd(textLayerRange.endContainer, textLayerRange.endOffset);
-        }
-        text = clone.toString().trim();
-        rangeForOffsets = clone;
+        inSpace = false;
+        normFullChars.push(fullText[i].toLowerCase());
+        normToOrigStart.push(i);
       }
-    } catch {
-      text = sel.toString().trim();
     }
-    if (!text) return;
-    const offsets = getPageTextOffsets(textLayer, rangeForOffsets);
-    if (offsets) {
-      onTextSelection(text, pageNum, offsets.start, offsets.end);
-    } else {
-      onTextSelection(text, pageNum, 0, 0);
+    const normFull = normFullChars.join('');
+    const normIdxFound = normFull.indexOf(searchNorm);
+    if (normIdxFound === -1) return null;
+    const normEnd = normIdxFound + searchNorm.length;
+    const origStart = normToOrigStart[normIdxFound] ?? 0;
+    const lastNormIdx = normEnd - 1;
+    const origEnd = lastNormIdx >= 0 && lastNormIdx < normToOrigStart.length
+      ? (normToOrigStart[lastNormIdx] ?? 0) + 1
+      : fullText.length;
+    return { start: origStart, end: Math.min(origEnd, fullText.length) };
+  }
+
+  function offsetToRange(
+    textNodes: Text[],
+    nodeStarts: number[],
+    fullTextLength: number,
+    startOffset: number,
+    endOffset: number
+  ): { startNode: Text; startOff: number; endNode: Text; endOff: number } | null {
+    if (startOffset < 0 || endOffset <= startOffset || startOffset >= fullTextLength) return null;
+    const clampedEndOffset = Math.min(endOffset, fullTextLength);
+    let startNodeIdx = -1;
+    let startOff = 0;
+    for (let k = 0; k < nodeStarts.length; k++) {
+      const nodeLen = (textNodes[k].textContent || '').length;
+      if (startOffset >= nodeStarts[k] && startOffset < nodeStarts[k] + nodeLen) {
+        startNodeIdx = k;
+        startOff = startOffset - nodeStarts[k];
+        break;
+      }
+    }
+    if (startNodeIdx < 0) return null;
+
+    let endNodeIdx = startNodeIdx;
+    let endOff = startOff + (endOffset - startOffset);
+    for (let k = startNodeIdx; k < textNodes.length; k++) {
+      const nodeLen = (textNodes[k].textContent || '').length;
+      if (endOff <= nodeLen) {
+        endNodeIdx = k;
+        break;
+      }
+    }
+
+    const startNode = textNodes[startNodeIdx];
+    const endNode = textNodes[endNodeIdx];
+    const finalStartOffset = Math.min(startOff, (startNode.textContent || '').length);
+    const finalEndOffset = endNode === startNode ? finalStartOffset + (endOffset - startOffset) : endOff;
+    return {
+      startNode,
+      startOff,
+      endNode,
+      endOff
+    };
+  }
+
+  function applyAnnotationOverlays(pageIndex1Based: number, pageWrapper: HTMLElement) {
+    const pageIndex0Based = pageIndex1Based - 1;
+    const forThisPage = annotations.filter((a) => a.pageIndex === pageIndex0Based);
+    if (forThisPage.length === 0) return;
+
+    const viewport = pageContainers.get(pageIndex1Based)?.canvas;
+    if (!viewport) return;
+
+    const wrapperRect = pageWrapper.getBoundingClientRect();
+    const textLayerDiv = pageWrapper.querySelector('.pdf-text-layer') as HTMLDivElement;
+    if (!textLayerDiv) return;
+
+    const existingOverlays = pageWrapper.querySelectorAll('.pdf-annotation-overlay');
+    existingOverlays.forEach(overlay => overlay.remove());
+
+    for (let i = 0; i < forThisPage.length; i++) {
+      const ann = forThisPage[i];
+      if (!ann.content) continue;
+
+      // Find the highlight span for this annotation
+      const highlightSpan = textLayerDiv.querySelector(`.pdf-annotation-marker[data-annotation-id="${ann.id}"]`);
+      if (!highlightSpan) continue;
+
+      const spanRect = highlightSpan.getBoundingClientRect();
+      const textLayerRect = textLayerDiv.getBoundingClientRect();
+
+      // Calculate position relative to the page wrapper
+      const left = spanRect.left - textLayerRect.left;
+      const top = spanRect.top - textLayerRect.top;
+      const width = spanRect.width;
+
+      const overlay = document.createElement('div');
+      overlay.className = 'pdf-annotation-overlay absolute bg-yellow-200 bg-opacity-80 border-2 border-yellow-400 p-2 rounded cursor-pointer shadow-lg';
+      overlay.style.cssText = `z-index: 10;top: ${top}px;left: ${left}px;max-width: ${Math.min(400, wrapperRect.width - left - 20)}px;position:absolute;`;
+      overlay.dataset.annotationId = ann.id;
+
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'pdf-annotation-content';
+
+      if (ann.content) {
+        const textDiv = document.createElement('div');
+        textDiv.className = 'text-gray-800 text-xs font-medium';
+        textDiv.textContent = ann.content;
+        contentDiv.appendChild(textDiv);
+      }
+
+      overlay.appendChild(contentDiv);
+
+      if (onAnnotationClick) {
+        overlay.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onAnnotationClick?.(ann.id);
+        };
+      }
+
+      // Position the overlay relative to the text layer
+      textLayerDiv.appendChild(overlay);
     }
   }
 
   $: newAnnotationsKey = annotations?.length + (annotations?.map((a) => a.id + (a.selectedText || '') + (a.startPos ?? '') + (a.endPos ?? '')).join(',')) || '';
+
   $: if (pdfUrl && containerEl && !loading && pdfDoc && newAnnotationsKey !== annotationsKey) {
     annotationsKey = newAnnotationsKey;
     requestAnimationFrame(() => {
@@ -517,35 +487,129 @@
           markers.forEach((m) => {
             const parent = m.parentNode;
             if (parent) {
-              while (m.firstChild) parent.insertBefore(m.firstChild, m);
+              while (m.firstChild) {
+                parent.insertBefore(m.firstChild, m);
+              }
               parent.removeChild(m);
             }
           });
           applyHighlightsOnPage(pageNum, textLayerDiv as HTMLDivElement);
+          applyAnnotationOverlays(pageNum, wrapper as HTMLElement);
         }
       });
     });
+  }
+
+  function handleMouseUp(event: MouseEvent) {
+    if (textSelectionTimeout) clearTimeout(textSelectionTimeout);
+    textSelectionTimeout = setTimeout(() => {
+      processTextSelection();
+    }, 100);
+  }
+
+  function handleTouchEnd(event: TouchEvent) {
+    if (textSelectionTimeout) clearTimeout(textSelectionTimeout);
+    textSelectionTimeout = setTimeout(() => {
+      processTextSelection();
+    }, 100);
+  }
+
+  function processTextSelection() {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) {
+      if (onTextSelection) {
+        onTextSelection('', 0, 0, 0);
+      }
+      return;
+    }
+
+    const selectedText = selection.toString().trim();
+    if (!selectedText) {
+      if (onTextSelection) {
+        onTextSelection('', 0, 0, 0);
+      }
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    const startContainer = range.startContainer;
+    const endContainer = range.endContainer;
+
+    // Find the page wrapper that contains the selection
+    let startPageWrapper = startContainer.parentElement?.closest('.pdf-page-wrapper') as HTMLElement | null;
+    let endPageWrapper = endContainer.parentElement?.closest('.pdf-page-wrapper') as HTMLElement | null;
+
+    if (!startPageWrapper || !endPageWrapper) return;
+
+    const startPageNum = parseInt(startPageWrapper.dataset?.page || '0', 10);
+    const endPageNum = parseInt(endPageWrapper.dataset?.page || '0', 10);
+
+    // Only allow single-page selections for now
+    if (startPageNum !== endPageNum) {
+      selection.removeAllRanges();
+      return;
+    }
+
+    const textLayerDiv = startPageWrapper.querySelector('.pdf-text-layer') as HTMLDivElement;
+    if (!textLayerDiv) return;
+
+    // Calculate character offsets
+    const walker = document.createTreeWalker(textLayerDiv, NodeFilter.SHOW_TEXT);
+    const textNodes: Text[] = [];
+    const nodeStarts: number[] = [];
+    let n: Node | null;
+    let fullTextLength = 0;
+
+    while ((n = walker.nextNode())) {
+      const textNode = n as Text;
+      nodeStarts.push(fullTextLength);
+      textNodes.push(textNode);
+      fullTextLength += (textNode.textContent || '').length;
+    }
+
+    // Find start offset
+    let startPos = 0;
+    const startTextNode = range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer as Text : null;
+    if (startTextNode) {
+      const startNodeIndex = textNodes.indexOf(startTextNode);
+      if (startNodeIndex >= 0) {
+        startPos = nodeStarts[startNodeIndex] + range.startOffset;
+      }
+    }
+
+    // Find end offset
+    let endPos = fullTextLength;
+    const endTextNode = range.endContainer.nodeType === Node.TEXT_NODE ? range.endContainer as Text : null;
+    if (endTextNode) {
+      const endNodeIndex = textNodes.indexOf(endTextNode);
+      if (endNodeIndex >= 0) {
+        endPos = nodeStarts[endNodeIndex] + range.endOffset;
+      }
+    }
+
+    if (onTextSelection) {
+      onTextSelection(selectedText, startPageNum - 1, startPos, endPos);
+    }
   }
 </script>
 
 <div class="pdf-viewer relative">
   {#if loading}
     <div class="flex items-center justify-center py-16 min-h-[200px]">
-      <div class="animate-spin rounded-full h-10 w-10 border-2 border-primary-600 border-t-transparent"></div>
+      <div class="animate-spin rounded-full h-10 w-10 border-2 border-orange-600 border-t-transparent"></div>
       <span class="ml-3 text-gray-600">Loading PDF...</span>
     </div>
   {:else if error}
     <div class="text-red-600 py-4 min-h-[100px]">{error}</div>
   {/if}
-  <!-- Container always in DOM (can be hidden when loading/error) so containerEl is set when renderAllPages() runs -->
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
     bind:this={containerEl}
     class="pdf-pages"
     class:hidden={loading || !!error}
-    on:mouseup={handleMouseUp}
     role="application"
-    aria-label="PDF document with selectable text. Select text to add an annotation."
+    aria-label="PDF document with annotations"
+    on:mouseup={handleMouseUp}
+    on:touchend={handleTouchEnd}
   ></div>
 </div>
 
@@ -565,50 +629,90 @@
     pointer-events: none !important;
     z-index: 0;
   }
+
+  /* --- Official pdf.js textLayer styles for proper alignment --- */
   :global(.pdf-viewer .pdf-text-layer) {
+    position: absolute;
+    text-align: initial;
+    inset: 0;
+    overflow: clip;
+    opacity: 1;
+    line-height: 1;
+    -webkit-text-size-adjust: none;
+    -moz-text-size-adjust: none;
+    text-size-adjust: none;
+    forced-color-adjust: none;
+    transform-origin: 0 0;
     z-index: 1;
     pointer-events: auto;
-    line-height: 1;
-    text-rendering: geometricPrecision;
-    -webkit-text-size-adjust: none;
-    text-size-adjust: none;
-    /* PDF.js text layer scaling so text aligns with canvas */
+    user-select: text;
+    cursor: text;
+    color: transparent;
+  }
+
+  /* CSS variable based font sizing from pdf.js */
+  :global(.pdf-viewer .pdf-text-layer) {
     --min-font-size: 1;
     --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
     --min-font-size-inv: calc(1 / var(--min-font-size));
   }
-  /* Span layout: font-size and transform must match PDF.js so text overlays canvas exactly */
-  :global(.pdf-viewer .pdf-text-layer > :not(.markedContent)),
-  :global(.pdf-viewer .pdf-text-layer .markedContent span:not(.markedContent)) {
+
+  /* Each text span is absolutely positioned by pdf.js TextLayer */
+  :global(.pdf-viewer .pdf-text-layer :is(span, br):not(.pdf-annotation-marker):not(.pdf-annotation-overlay *)) {
+    color: transparent;
     position: absolute;
     white-space: pre;
-    transform-origin: 0 0;
+    cursor: text;
+    transform-origin: 0% 0%;
+  }
+
+  /* Font size and transform via CSS variables set by pdf.js TextLayer */
+  :global(.pdf-viewer .pdf-text-layer > :not(.markedContent)),
+  :global(.pdf-viewer .pdf-text-layer .markedContent span:not(.markedContent)) {
+    z-index: 1;
     --font-height: 0;
     font-size: calc(var(--text-scale-factor) * var(--font-height));
     --scale-x: 1;
     --rotate: 0deg;
     transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
   }
+
   :global(.pdf-viewer .pdf-text-layer .markedContent) {
     display: contents;
   }
-  /* Teks di text layer transparan (hanya canvas yang terlihat), tapi seleksi tetap kelihatan */
-  :global(.pdf-viewer .pdf-text-layer span:not(.pdf-annotation-marker)),
-  :global(.pdf-viewer .pdf-text-layer br) {
-    color: transparent !important;
-    -webkit-text-fill-color: transparent !important;
-    text-shadow: none !important;
-    cursor: text;
-  }
+
   :global(.pdf-viewer .pdf-text-layer ::selection) {
     background: rgba(59, 130, 246, 0.4);
   }
   :global(.pdf-viewer .pdf-text-layer ::-moz-selection) {
     background: rgba(59, 130, 246, 0.4);
   }
+  :global(.pdf-viewer .pdf-text-layer br::selection) {
+    background: transparent;
+  }
+  :global(.pdf-viewer .pdf-text-layer br::-moz-selection) {
+    background: transparent;
+  }
+
+  :global(.pdf-viewer .pdf-annotation-overlay) {
+    z-index: 100 !important;
+    backdrop-filter: blur(2px);
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  :global(.pdf-viewer .pdf-annotation-overlay:hover) {
+    background-color: rgba(253, 224, 71, 0.95) !important;
+    border-color: rgba(245, 158, 11, 1) !important;
+    transform: scale(1.02);
+    z-index: 101 !important;
+  }
   :global(.pdf-viewer .pdf-annotation-marker) {
-    color: transparent !important;
-    -webkit-text-fill-color: transparent !important;
+    color: #1f2937 !important;
+    -webkit-text-fill-color: #1f2937 !important;
     cursor: pointer;
+    text-shadow: none !important;
+    position: relative !important;
+    white-space: pre !important;
   }
 </style>

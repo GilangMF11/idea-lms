@@ -2,9 +2,21 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { createUser, generateToken } from '$lib/auth.js';
 import { prisma } from '$lib/database.js';
+import { generateVerificationToken, sendVerificationEmail } from '$lib/server/email.js';
+import { rateLimiter } from '$lib/rate-limiter.js';
 
-export const POST: RequestHandler = async ({ request }: { request: any }) => {
+export const POST: RequestHandler = async ({ request, getClientAddress }) => {
   try {
+    // SECURITY: Rate limit registration by IP (3 per hour)
+    const clientIP = getClientAddress();
+    const rateCheck = rateLimiter.checkLimit(clientIP, 'register', 3, 60 * 60 * 1000);
+    if (!rateCheck.allowed) {
+      return json(
+        { error: 'Too many registration attempts. Please try again later.' },
+        { status: 429 }
+      );
+    }
+
     const { 
       email, 
       username, 
@@ -59,11 +71,28 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
       city,
     });
 
-    const token = generateToken(user);
+    // Generate Verification Token
+    const vToken = generateVerificationToken();
+    const expiry = new Date();
+    expiry.setHours(expiry.getHours() + 24); // Token valid for 24 hours
 
+    // Update user with verification token
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        verificationToken: vToken,
+        verificationTokenExpiry: expiry,
+      } as any,
+    });
+
+    // Send the email
+    await sendVerificationEmail(email, vToken, firstName);
+
+    // Return success message without the login token
     return json({
-      user,
-      token,
+      message: 'Registration successful. Please check your email to verify your account.',
+      requireVerification: true,
+      user
     }, { status: 201 });
   } catch (error) {
     console.error('Registration error:', error);

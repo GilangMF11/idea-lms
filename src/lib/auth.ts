@@ -6,6 +6,13 @@ import { config } from './config.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-here';
 
+// SECURITY: Fail fast if JWT_SECRET is not set in production
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
+  throw new Error('FATAL: JWT_SECRET environment variable must be set in production');
+}
+export const DEFAULT_SESSION_MAX_AGE_SECONDS = Number(process.env.SESSION_MAX_AGE_SECONDS || 60 * 60 * 12); // 12h
+export const REMEMBER_ME_MAX_AGE_SECONDS = Number(process.env.REMEMBER_ME_MAX_AGE_SECONDS || 60 * 60 * 24 * 7); // 7d
+
 export interface AuthUser {
   id: string;
   email: string;
@@ -42,7 +49,10 @@ export async function verifyPassword(password: string, hashedPassword: string): 
   return bcrypt.compare(password, hashedPassword);
 }
 
-export function generateToken(user: AuthUser): string {
+export function generateToken(user: AuthUser, options?: { rememberMe?: boolean }): string {
+  const expiresIn: jwt.SignOptions['expiresIn'] = options?.rememberMe
+    ? `${REMEMBER_ME_MAX_AGE_SECONDS}s`
+    : `${DEFAULT_SESSION_MAX_AGE_SECONDS}s`;
   return jwt.sign(
     {
       id: user.id,
@@ -51,7 +61,7 @@ export function generateToken(user: AuthUser): string {
       role: user.role,
     },
     JWT_SECRET,
-    { expiresIn: '7d' }
+    { expiresIn }
   );
 }
 
@@ -76,18 +86,27 @@ export async function authenticateUser(email: string, password: string): Promise
     where: { email },
   });
 
-  if (!user || !user.isActive) {
-    return null;
+  if (!user) {
+    throw new Error('User account not found.');
+  }
+
+  if (!user.isActive) {
+    throw new Error('Your account is currently inactive.');
   }
 
   // If user has no password (OAuth user), they can't login with email/password
   if (!user.password) {
-    return null;
+    throw new Error('Please log in using your Google account.');
+  }
+
+  // Enforce email verification
+  if (!(user as any).isEmailVerified) {
+    throw new Error('EMAIL_NOT_VERIFIED');
   }
 
   const isValidPassword = await verifyPassword(password, user.password);
   if (!isValidPassword) {
-    return null;
+    throw new Error('Incorrect password. Please try again.');
   }
 
   return {
@@ -210,6 +229,7 @@ export async function authenticateWithGoogle(googleToken: string): Promise<AuthU
           googleId: googleUser.sub as any, // Type assertion needed until Prisma types are regenerated
           avatar: googleUser.picture,
           role: 'STUDENT',
+          isEmailVerified: true, // Google accounts are already verified
         } as any,
       });
     }

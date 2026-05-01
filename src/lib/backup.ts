@@ -1,7 +1,16 @@
 import { prisma } from './database.js';
-import { writeFile, readFile, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { writeFile, readFile, mkdir, readdir, stat, rm } from 'fs/promises';
+import { createWriteStream, createReadStream } from 'fs';
+import { join, basename } from 'path';
 import { formatDateTime } from './utils.js';
+import crypto from 'crypto';
+import archiver from 'archiver';
+import AdmZip from 'adm-zip';
+import dotenv from 'dotenv';
+import { logger } from './logger.js';
+
+// Load .env explicitly for cron limits if not in SvelteKit context
+dotenv.config();
 
 export interface BackupOptions {
   includeData?: {
@@ -38,14 +47,7 @@ export class BackupService {
     this.backupDir = backupDir;
   }
 
-  async createBackup(options: BackupOptions = {}): Promise<string> {
-    const timestamp = formatDateTime(new Date()).replace(/[:.]/g, '-');
-    const backupId = `backup-${timestamp}`;
-    const backupPath = join(this.backupDir, `${backupId}.json`);
-
-    // Ensure backup directory exists
-    await mkdir(this.backupDir, { recursive: true });
-
+  async generateBackupData(options: BackupOptions = {}): Promise<BackupData> {
     const backupData: BackupData = {
       metadata: {
         version: '1.0.0',
@@ -56,7 +58,6 @@ export class BackupService {
       data: {},
     };
 
-    // Export data based on options
     if (options.includeData?.users !== false) {
       backupData.data.users = await this.exportUsers();
       backupData.metadata.tables.push('users');
@@ -131,7 +132,18 @@ export class BackupService {
       backupData.metadata.recordCounts.histories = backupData.data.histories.length;
     }
 
-    // Write backup file
+    return backupData;
+  }
+
+  async createBackup(options: BackupOptions = {}): Promise<string> {
+    const timestamp = formatDateTime(new Date()).replace(/[:.]/g, '-');
+    const backupId = `backup-${timestamp}`;
+    const backupPath = join(this.backupDir, `${backupId}.json`);
+
+    await mkdir(this.backupDir, { recursive: true });
+
+    const backupData = await this.generateBackupData(options);
+
     await writeFile(backupPath, JSON.stringify(backupData, null, 2));
 
     return backupPath;
@@ -206,16 +218,7 @@ export class BackupService {
     }
   }
 
-  async listBackups(): Promise<string[]> {
-    // In a real implementation, you would read the backup directory
-    // and return a list of available backup files
-    return [];
-  }
 
-  async deleteBackup(backupPath: string): Promise<void> {
-    // In a real implementation, you would delete the backup file
-    console.log(`Deleting backup: ${backupPath}`);
-  }
 
   private async clearAllData(): Promise<void> {
     // Delete in reverse order of dependencies
@@ -445,6 +448,219 @@ export class BackupService {
         update: history,
         create: history,
       });
+    }
+  }
+
+  // --- MASTER FULL BACKUP SYSTEM ---
+
+  /**
+   * Generates a fully encrypted ZIP archive containing the database and uploads directory.
+   */
+  async createFullSystemBackup(password?: string): Promise<string> {
+    const backupPassword = password || process.env.BACKUP_PASSWORD;
+    if (!backupPassword) {
+      throw new Error('BACKUP_PASSWORD environment variable is not set. Cannot encrypt backup.');
+    }
+
+    const timestamp = formatDateTime(new Date()).replace(/[:.]/g, '-');
+    const backupId = `master-${timestamp}`;
+    const backupFileName = `${backupId}.zip.enc`;
+    const finalDestPath = join(this.backupDir, backupFileName);
+
+    await mkdir(this.backupDir, { recursive: true });
+
+    return new Promise(async (resolve, reject) => {
+      try {
+        const outputStream = createWriteStream(finalDestPath);
+        
+        // Setup AES-256-CBC Encryption Stream
+        const iv = crypto.randomBytes(16);
+        const key = crypto.scryptSync(backupPassword, 'lms-salt', 32);
+        const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+
+        outputStream.on('error', reject);
+        cipher.on('error', reject);
+
+        // First 16 bytes of the file will be the IV
+        outputStream.write(iv);
+
+        // Pipe archiver -> cipher -> file
+        const archive = archiver('zip', {
+          zlib: { level: 9 } // Maximum compression
+        });
+
+        archive.on('error', reject);
+        archive.pipe(cipher).pipe(outputStream);
+
+        // 1. Add Database JSON
+        logger.info('Generating database JSON for master backup...');
+        const dbData = await this.generateBackupData();
+        // Convert BigInts safely
+        const dbJson = JSON.stringify(dbData, (key, value) => 
+          typeof value === 'bigint' ? value.toString() : value
+        , 2);
+        archive.append(dbJson, { name: 'database.json' });
+
+        // 2. Add Uploads / Files Directory
+        const uploadsDir = join(process.cwd(), 'uploads');
+        try {
+          const uploadsStat = await stat(uploadsDir);
+          if (uploadsStat.isDirectory()) {
+            logger.info('Adding uploads directory to master backup...');
+            archive.directory(uploadsDir, 'uploads');
+          }
+        } catch (e) {
+          logger.warn('Uploads directory not found or inaccessible; skipping file attachments in backup.');
+        }
+
+        // 3. Add .env backup (optional, but requested for 'Configuration')
+        try {
+          const envPath = join(process.cwd(), '.env');
+          await stat(envPath);
+          archive.file(envPath, { name: '.env.backup' });
+        } catch (e) {
+          logger.warn('.env file not found; skipping in backup.');
+        }
+
+        // Finalize Zip Building (Triggers stream ends)
+        await archive.finalize();
+
+        outputStream.on('finish', () => {
+          logger.info(`Master backup successfully created and encrypted: ${backupFileName}`);
+          resolve(backupFileName);
+        });
+
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  /**
+   * Retrieves all available encrypted backup files from the local backups directory.
+   */
+  async getBackupHistory(): Promise<Array<{ filename: string; sizeBytes: number; createdAt: Date }>> {
+    try {
+      await mkdir(this.backupDir, { recursive: true });
+      const files = await readdir(this.backupDir);
+      
+      const backups = [];
+      for (const file of files) {
+        if (file.endsWith('.enc')) {
+          const fileStat = await stat(join(this.backupDir, file));
+          backups.push({
+            filename: file,
+            sizeBytes: fileStat.size,
+            createdAt: fileStat.birthtime
+          });
+        }
+      }
+
+      // Sort descending by creation date
+      return backups.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    } catch (e) {
+      logger.error('Failed to retrieve backup history', undefined, e as Error);
+      return [];
+    }
+  }
+
+  /**
+   * Deletes a specific master backup file.
+   */
+  async deleteBackup(filename: string): Promise<boolean> {
+    try {
+      // Security check to prevent path traversal
+      if (filename.includes('/') || filename.includes('..')) {
+        throw new Error('Invalid filename');
+      }
+      
+      const targetPath = join(this.backupDir, filename);
+      await rm(targetPath);
+      return true;
+    } catch (err) {
+      logger.error(`Failed to delete backup file: ${filename}`, undefined, err as Error);
+      return false;
+    }
+  }
+
+  /**
+   * Restores a master backup: Decrypts .enc, unzips, restores database, and copies files.
+   * VERY DESTRUCTIVE processing.
+   */
+  async restoreFullSystemBackup(filename: string, password?: string): Promise<void> {
+    const backupPassword = password || process.env.BACKUP_PASSWORD;
+    if (!backupPassword) {
+      throw new Error('BACKUP_PASSWORD environment variable is not set. Cannot decrypt backup.');
+    }
+
+    if (filename.includes('/') || filename.includes('..')) {
+      throw new Error('Invalid backup filename');
+    }
+
+    const encryptedFilePath = join(this.backupDir, filename);
+    const tempExtractDir = join(this.backupDir, `restore_temp_${Date.now()}`);
+
+    try {
+      // 1. Verify existence
+      await stat(encryptedFilePath);
+      
+      // 2. Read IV (First 16 bytes)
+      const iv = Buffer.alloc(16);
+      const fd = await readFile(encryptedFilePath);
+      fd.copy(iv, 0, 0, 16);
+      
+      const encryptedContent = fd.subarray(16);
+
+      // 3. Decrypt buffer directly into RAM (Requires RAM >= Backup size)
+      // Since backups might grow, stream would be better but memory buffer is fine for MVP.
+      const key = crypto.scryptSync(backupPassword, 'lms-salt', 32);
+      const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+      
+      let decryptedBuffer = decipher.update(encryptedContent);
+      decryptedBuffer = Buffer.concat([decryptedBuffer, decipher.final()]);
+
+      // 4. Extract ZIP via adm-zip using decrypted buffer
+      logger.info('Archive decrypted. Extracting files...');
+      const zip = new AdmZip(decryptedBuffer);
+      
+      zip.extractAllTo(tempExtractDir, true);
+
+      // 5. Restore Database from extracted database.json
+      const dbJsonPath = join(tempExtractDir, 'database.json');
+      try {
+        await stat(dbJsonPath);
+        logger.info('Restoring Database models...');
+        // Reuse original RESTORE method but point to specific extracted JSON
+        await this.restoreBackup(dbJsonPath, { clearExisting: false }); // Avoid total teardown if not required, or set true
+      } catch (e) {
+        logger.warn('No database.json found inside the backup archive.');
+      }
+
+      // 6. Restore Files
+      // Copy 'uploads' folder extracted to process.cwd()/uploads
+      const extractedUploadsDir = join(tempExtractDir, 'uploads');
+      try {
+        await stat(extractedUploadsDir);
+        logger.info('Restoring file attachments...');
+        // recursive copy logic missing in standard fs, but we can use cp in Node 16.7+
+        const fsPromises = await import('fs/promises');
+        await fsPromises.cp(extractedUploadsDir, join(process.cwd(), 'uploads'), { recursive: true, force: true });
+      } catch (e) {
+        logger.warn('No uploads/ directory found in backup or could not overwrite.');
+      }
+
+      logger.info(`Successfully restored master system from ${filename}`);
+      
+    } catch (err) {
+      logger.error('Full system restore failed horribly.', undefined, err as Error);
+      throw err;
+    } finally {
+      // 7. Cleanup temp extracted files to prevent leak
+      try {
+        await rm(tempExtractDir, { recursive: true, force: true });
+      } catch (e) {
+        // Ignore cleanup failure
+      }
     }
   }
 }

@@ -1,21 +1,12 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { prisma } from '$lib/database.js';
-import { verifyToken } from '$lib/auth.js';
+import { getAuthUser, apiError, requireTeacher, requireAdmin } from '$lib/api-utils.js';
 import { getHistoryByClass, getHistoryByRecord } from '$lib/history.js';
 
 export const GET: RequestHandler = async ({ request, url }: { request: any; url: any }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
-    if (!user) {
-      return json({ error: 'Invalid token' }, { status: 401 });
-    }
+    const user = getAuthUser(request);
 
     const classId = url.searchParams.get('classId');
     const tableName = url.searchParams.get('tableName');
@@ -95,7 +86,6 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
 
     return json({ error: 'Class ID or table name and record ID are required' }, { status: 400 });
   } catch (error) {
-    console.error('Get history error:', error);
-    return json({ error: 'Internal server error' }, { status: 500 });
+    return apiError(error);
   }
 };

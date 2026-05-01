@@ -1,0 +1,12 @@
+export interface TeacherAnalytics {
+  totalClasses: number;
+  totalStudents: number;
+  totalReadingTexts: number;
+  totalExercises: number;
+  recentActivity: Array<{
+    type: string;
+    title: string;
+    timestamp: Date;
+    classId: string;
+  }>;
+}

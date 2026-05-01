@@ -65,13 +65,8 @@ export function calculatePagination(
   };
 }
 
-export function sanitizeHtml(html: string): string {
-  // Basic HTML sanitization - in production, use a proper HTML sanitizer like DOMPurify
-  return html
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
-    .replace(/on\w+="[^"]*"/gi, '');
-}
+// sanitizeHtml has been moved to src/lib/sanitize.ts (DOMPurify-based)
+// Do NOT add a regex-based sanitizer here.
 
 export function truncateText(text: string, maxLength: number): string {
   if (text.length <= maxLength) {

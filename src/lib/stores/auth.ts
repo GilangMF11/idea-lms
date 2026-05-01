@@ -27,6 +27,20 @@ const initialState: AuthState = {
   isLoading: true,
 };
 
+function isTokenExpired(token: string): boolean {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return true;
+    const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const decoded = JSON.parse(atob(payload));
+    if (!decoded?.exp || typeof decoded.exp !== 'number') return true;
+    const now = Math.floor(Date.now() / 1000);
+    return decoded.exp <= now;
+  } catch {
+    return true;
+  }
+}
+
 function createAuthStore() {
   const { subscribe, set, update } = writable<AuthState>(initialState);
 
@@ -41,6 +55,18 @@ function createAuthStore() {
         
         if (token && userStr) {
           try {
+            if (isTokenExpired(token)) {
+              localStorage.removeItem('auth_token');
+              localStorage.removeItem('auth_user');
+              update(state => ({
+                ...state,
+                user: null,
+                token: null,
+                isAuthenticated: false,
+                isLoading: false
+              }));
+              return;
+            }
             const user = JSON.parse(userStr);
             update(state => ({
               ...state,
@@ -62,7 +88,7 @@ function createAuthStore() {
     },
 
     // Login user
-    login: async (email: string, password: string) => {
+    login: async (email: string, password: string, rememberMe = false) => {
       update(state => ({ ...state, isLoading: true }));
       
       try {
@@ -71,7 +97,7 @@ function createAuthStore() {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ email, password }),
+          body: JSON.stringify({ email, password, rememberMe }),
         });
 
         const data = await response.json();
@@ -135,10 +161,15 @@ function createAuthStore() {
           throw new Error(data.error || 'Registration failed');
         }
 
+        if (data.requireVerification) {
+          update(state => ({ ...state, isLoading: false }));
+          return { success: true, requireVerification: true, message: data.message };
+        }
+
         const { user, token } = data;
 
         // Store in localStorage
-        if (browser) {
+        if (browser && token && user) {
           localStorage.setItem('auth_token', token);
           localStorage.setItem('auth_user', JSON.stringify(user));
         }

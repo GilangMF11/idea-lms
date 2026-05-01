@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
-import type { RequestHandler } from './$types';
-import { prisma } from '$lib/database';
-import { verifyToken } from '$lib/auth';
+import type { RequestHandler } from './$types.js';
+import { prisma } from '$lib/database.js';
+import { verifyToken } from '$lib/auth.js';
 
 export const GET: RequestHandler = async ({ url, cookies }) => {
   try {
@@ -17,7 +17,7 @@ export const GET: RequestHandler = async ({ url, cookies }) => {
 
     const exerciseId = url.searchParams.get('exerciseId');
     if (!exerciseId) {
-      return json({ error: 'Exercise ID is required' }, { status: 400 });
+      return json({ error: 'Exit ticket ID is required' }, { status: 400 });
     }
 
     const timer = await prisma.exerciseTimer.findUnique({
@@ -122,7 +122,7 @@ export const DELETE: RequestHandler = async ({ url, cookies }) => {
 
     const exerciseId = url.searchParams.get('exerciseId');
     if (!exerciseId) {
-      return json({ error: 'Exercise ID is required' }, { status: 400 });
+      return json({ error: 'Exit ticket ID is required' }, { status: 400 });
     }
 
     await prisma.exerciseTimer.deleteMany({

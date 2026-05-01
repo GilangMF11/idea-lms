@@ -1,27 +1,14 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { prisma } from '$lib/database.js';
-import { verifyToken } from '$lib/auth.js';
+import { getAuthUser, apiError, requireTeacher, requireAdmin } from '$lib/api-utils.js';
 import { createHistory } from '$lib/history.js';
 
 export const GET: RequestHandler = async ({ request, url }: { request: any; url: any }) => {
   try {
     console.log('GET /api/chat - Starting request');
     
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      console.log('GET /api/chat - No auth header');
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    console.log('GET /api/chat - Token:', token.substring(0, 20) + '...');
-    
-    const user = verifyToken(token);
-    if (!user) {
-      console.log('GET /api/chat - Invalid token');
-      return json({ error: 'Invalid token' }, { status: 401 });
-    }
+    const user = getAuthUser(request);
 
     console.log('GET /api/chat - User:', user.id);
 
@@ -92,25 +79,15 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
 
     return json({ messages });
   } catch (error) {
-    console.error('Get chat messages error:', error);
-    return json({ error: 'Internal server error' }, { status: 500 });
+    return apiError(error);
   }
 };
 
 export const POST: RequestHandler = async ({ request }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const user = getAuthUser(request);
 
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
-    if (!user) {
-      return json({ error: 'Invalid token' }, { status: 401 });
-    }
-
-    const { classId, content, annotationId, type = 'TEXT', audioUrl, audioDuration } = await request.json();
+    const { classId, content, annotationId, type = 'TEXT', audioUrl, audioDuration, chatType = 'ASKING_QUESTION' } = await request.json();
 
     if (!classId) {
       return json({ error: 'Class ID is required' }, { status: 400 });
@@ -162,6 +139,7 @@ export const POST: RequestHandler = async ({ request }) => {
         audioUrl: type === 'AUDIO' ? audioUrl : null,
         audioDuration: type === 'AUDIO' ? audioDuration ?? null : null,
         ...(annotationId && { annotationId }), // Include annotationId if provided
+        chatType: chatType as 'ASKING_QUESTION' | 'ANSWERING_QUESTION' | 'GIVING_NEW_IDEA' | 'DISPUTING_IDEAS',
       },
       include: {
         user: {
@@ -188,7 +166,6 @@ export const POST: RequestHandler = async ({ request }) => {
 
     return json({ message }, { status: 201 });
   } catch (error) {
-    console.error('Create chat message error:', error);
-    return json({ error: 'Internal server error' }, { status: 500 });
+    return apiError(error);
   }
 };

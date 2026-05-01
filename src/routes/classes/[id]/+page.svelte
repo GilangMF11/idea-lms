@@ -9,11 +9,17 @@
   let students: any[] = [];
   let exercises: any[] = [];
   let readingTexts: any[] = [];
+  let groups: any[] = [];
+  let lessons: any[] = [];
+  let expandedLessons: Set<string> = new Set();
+  let myGroupMemberships: any[] = [];
+  let joinedGroupIds: Set<string> = new Set();
   let loading = true;
   let error = '';
   let activeTab = 'overview';
   let showReadingTextDialog = false;
   let blockedExercise: any = null;
+  let joinGroupLoading = false;
 
   onMount(() => {
     authStore.init();
@@ -90,6 +96,50 @@
       if (readingTextsResponse.ok) {
         const readingTextsResult = await readingTextsResponse.json();
         readingTexts = readingTextsResult.readingTexts || [];
+      }
+
+      // Load groups
+      const groupsResponse = await fetch(`/api/groups?classId=${classId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (groupsResponse.ok) {
+        const groupsResult = await groupsResponse.json();
+        groups = groupsResult.groups || [];
+      }
+
+      // Load lessons
+      const lessonsResponse = await fetch(`/api/lessons?classId=${classId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (lessonsResponse.ok) {
+        const lessonsResult = await lessonsResponse.json();
+        lessons = lessonsResult.lessons || [];
+        // Auto-expand all lessons
+        expandedLessons = new Set(lessons.map((l: any) => l.id));
+      }
+
+      // Load user's group memberships
+      if ($authStore.user?.role === 'STUDENT') {
+        const membershipsResponse = await fetch(`/api/group-memberships?classId=${classId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (membershipsResponse.ok) {
+          const membershipsResult = await membershipsResponse.json();
+          myGroupMemberships = membershipsResult.memberships || [];
+          joinedGroupIds = new Set(myGroupMemberships.map((m: any) => m.groupId));
+        }
       }
 
     } catch (err) {
@@ -180,6 +230,71 @@
     }
     closeReadingTextDialog();
   }
+
+  async function handleJoinGroup(groupId: string) {
+    // Check if student already joined a group in the same lesson
+    const targetGroup = groups.find((g: any) => g.id === groupId);
+    if (targetGroup?.lessonId) {
+      const lessonGroups = groups.filter((g: any) => g.lessonId === targetGroup.lessonId);
+      const alreadyJoinedInLesson = lessonGroups.some((g: any) => joinedGroupIds.has(g.id));
+      if (alreadyJoinedInLesson) {
+        alert('You have already joined a group in this lesson.');
+        return;
+      }
+    }
+
+    try {
+      joinGroupLoading = true;
+
+      const response = await fetch(`/api/groups/${groupId}/members`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({})
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        myGroupMemberships = [...myGroupMemberships, result.member];
+        joinedGroupIds = new Set([...joinedGroupIds, groupId]);
+      } else {
+        const err = await response.json();
+        alert(err.error || 'Failed to join group');
+      }
+    } catch (err) {
+      console.error('Error joining group:', err);
+      alert('Failed to join group');
+    } finally {
+      joinGroupLoading = false;
+    }
+  }
+
+
+  function getScheduleStatus(text: any): 'scheduled' | 'open' | 'closed' | 'active' {
+    if (!text.openAt && !text.closeAt) return 'active';
+    const now = new Date();
+    if (text.openAt && now < new Date(text.openAt)) return 'scheduled';
+    if (text.closeAt && now > new Date(text.closeAt)) return 'closed';
+    return 'open';
+  }
+
+  function formatScheduleDate(dateStr: string): string {
+    return new Date(dateStr).toLocaleString('en-US', {
+      day: 'numeric', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+  }
+
+  function toggleLessonExpand(lessonId: string) {
+    if (expandedLessons.has(lessonId)) {
+      expandedLessons.delete(lessonId);
+    } else {
+      expandedLessons.add(lessonId);
+    }
+    expandedLessons = new Set(expandedLessons);
+  }
 </script>
 
 <svelte:head>
@@ -213,7 +328,7 @@
           <div class="flex items-center mb-3 sm:mb-0">
             <div class="mr-2 sm:mr-4 flex-shrink-0">
               <Button variant="secondary" size="sm" on:click={goBack}>
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-4 h-4 mr-0 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                 </svg>
                 <span class="hidden sm:inline">Back</span>
@@ -332,12 +447,14 @@
       <div class="mb-8">
         <div class="border-b border-gray-200">
           <nav class="-mb-px flex space-x-3 sm:space-x-8 overflow-x-auto scrollbar-hide">
+            <!-- 1. Overview -->
             <button
               class="py-2 px-2 sm:px-1 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap flex-shrink-0 {activeTab === 'overview' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
               on:click={() => activeTab = 'overview'}
             >
               Overview
             </button>
+            <!-- 2. Students (TEACHER/ADMIN ONLY) -->
             {#if $authStore.user?.role === 'TEACHER' || $authStore.user?.role === 'ADMIN'}
             <button
               class="py-2 px-2 sm:px-1 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap flex-shrink-0 {activeTab === 'students' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
@@ -348,6 +465,25 @@
               <span class="text-primary-600 font-semibold">({students.length})</span>
             </button>
             {/if}
+            <!-- 3. Lessons (Formerly Materials) -->
+            <button
+              class="py-2 px-2 sm:px-1 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap flex-shrink-0 {activeTab === 'lessons' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
+              on:click={() => activeTab = 'lessons'}
+            >
+              <span class="inline sm:hidden">Lsn </span>
+              <span class="hidden sm:inline">Lessons </span>
+              <span class="text-primary-600 font-semibold">({readingTexts.length})</span>
+            </button>
+            <!-- 4. Groups -->
+            <button
+              class="py-2 px-2 sm:px-1 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap flex-shrink-0 {activeTab === 'groups' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
+              on:click={() => activeTab = 'groups'}
+            >
+              <span class="inline sm:hidden">Grp</span>
+              <span class="hidden sm:inline">Groups</span>
+              <span class="text-primary-600 font-semibold">({groups.length})</span>
+            </button>
+            <!-- 5. Exit Tickets -->
             <button
               class="py-2 px-2 sm:px-1 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap flex-shrink-0 {activeTab === 'assignments' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
               on:click={() => activeTab = 'assignments'}
@@ -355,14 +491,6 @@
               <span class="inline sm:hidden">Tickets </span>
               <span class="hidden sm:inline">Exit Tickets </span>
               <span class="text-primary-600 font-semibold">({exercises.length})</span>
-            </button>
-            <button
-              class="py-2 px-2 sm:px-1 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap flex-shrink-0 {activeTab === 'materials' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
-              on:click={() => activeTab = 'materials'}
-            >
-              <span class="inline sm:hidden">Read </span>
-              <span class="hidden sm:inline">Materials </span>
-              <span class="text-primary-600 font-semibold">({readingTexts.length})</span>
             </button>
           </nav>
         </div>
@@ -375,8 +503,10 @@
         {@render studentsTab()}
       {:else if activeTab === 'assignments'}
         {@render assignmentsTab()}
-      {:else if activeTab === 'materials'}
-        {@render materialsTab()}
+      {:else if activeTab === 'lessons'}
+        {@render lessonsTab()}
+      {:else if activeTab === 'groups'}
+        {@render groupsTab()}
       {/if}
     </main>
   </div>
@@ -602,12 +732,11 @@
     </div>
 
     {#if exercises.length > 0}
-      <div class="space-y-4">
-        {#each exercises as exercise}
+      {#snippet exerciseCard(exercise: any)}
           {#if $authStore.user?.role === 'STUDENT'}
             <!-- Student view: clickable card -->
             <div 
-              class="border border-gray-200 rounded-lg p-4 cursor-pointer hover:border-primary-300 hover:shadow-md transition-all"
+              class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm cursor-pointer hover:shadow-md hover:-translate-y-1 hover:border-primary-300 transition-all duration-200"
               on:click={() => handleExerciseClick(exercise)}
               role="button"
               tabindex="0"
@@ -635,7 +764,7 @@
             </div>
           {:else}
             <!-- Teacher/Admin view: card with buttons -->
-            <div class="border border-gray-200 rounded-lg p-4">
+            <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-1 hover:border-primary-200 transition-all duration-200">
               <div class="flex items-center justify-between">
                 <div class="flex-1">
                   <h4 class="text-sm font-medium text-gray-900">{exercise.title}</h4>
@@ -660,7 +789,40 @@
               </div>
             </div>
           {/if}
+      {/snippet}
+
+      <div class="space-y-8">
+        {#each lessons as lesson}
+          {@const lessonExercises = exercises.filter((e: any) => e.lessonId === lesson.id)}
+          {#if lessonExercises.length > 0}
+            <div>
+              <div class="flex items-center mb-4">
+                <h4 class="text-md font-semibold text-gray-800">{lesson.title}</h4>
+                <div class="ml-4 flex-grow border-t border-gray-200"></div>
+              </div>
+              <div class="space-y-4">
+                {#each lessonExercises as exercise}
+                  {@render exerciseCard(exercise)}
+                {/each}
+              </div>
+            </div>
+          {/if}
         {/each}
+
+        {#if exercises.some((e: any) => !e.lessonId)}
+          {@const unassignedExercises = exercises.filter((e: any) => !e.lessonId)}
+          <div>
+            <div class="flex items-center mb-4">
+              <h4 class="text-md font-semibold text-gray-800">Class-wide Exit Tickets</h4>
+              <div class="ml-4 flex-grow border-t border-gray-200"></div>
+            </div>
+            <div class="space-y-4">
+              {#each unassignedExercises as exercise}
+                {@render exerciseCard(exercise)}
+              {/each}
+            </div>
+          </div>
+        {/if}
       </div>
     {:else}
       <div class="text-center py-12">
@@ -681,97 +843,428 @@
   </div>
 {/snippet}
 
-<!-- Materials Tab -->
-{#snippet materialsTab()}
+<!-- Lessons Tab (grouped by Lessons) -->
+{#snippet lessonsTab()}
   <div class="card p-6">
-    <div class="flex justify-between items-center mb-6">
-      <h3 class="text-lg font-semibold text-gray-900">Reading Materials ({readingTexts.length})</h3>
-      <div class="text-sm text-gray-500">
-        Total reading materials
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+      <div>
+        <h3 class="text-lg font-semibold text-gray-900">Lessons</h3>
+        <div class="text-sm text-gray-500">
+          {lessons.length} lesson(s) &middot; {readingTexts.length} reading text(s) &middot; {exercises.length} exit ticket(s)
+        </div>
       </div>
+      {#if readingTexts.length > 0}
+        <Button variant="secondary" size="sm" on:click={() => goto(`/classes/${classData.id}/chat-statistics`)}>
+          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+          Discussion Statistics
+        </Button>
+      {/if}
     </div>
 
-    {#if readingTexts.length > 0}
-      <div class="space-y-4">
-        {#each readingTexts as text}
-          {#if $authStore.user?.role === 'STUDENT'}
-            <!-- Student view: clickable card -->
-            <div 
-              class="border border-gray-200 rounded-lg p-4 cursor-pointer hover:border-primary-300 hover:shadow-md transition-all"
-              on:click={() => goto(`/reading-texts/${text.id}`)}
-              role="button"
-              tabindex="0"
-              on:keydown={(e) => e.key === 'Enter' && goto(`/reading-texts/${text.id}`)}
+    {#if lessons.length > 0}
+      <div class="space-y-3">
+        {#each lessons as lesson}
+          {@const lessonTexts = readingTexts.filter((t: any) => t.lessonId === lesson.id)}
+          {@const lessonExercises = exercises.filter((e: any) => e.lessonId === lesson.id)}
+          {@const lessonGroups = groups.filter((g: any) => g.lessonId === lesson.id)}
+          {@const isExpanded = expandedLessons.has(lesson.id)}
+          <div class="border border-gray-200 rounded-lg overflow-hidden">
+            <!-- Lesson Header (clickable) -->
+            <button
+              type="button"
+              class="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+              on:click={() => toggleLessonExpand(lesson.id)}
             >
-              <div class="flex items-center justify-between">
-                <div class="flex-1">
-                  <h4 class="text-sm font-medium text-gray-900">{text.title}</h4>
-                  <p class="text-sm text-gray-500 mt-1">{text.author || 'Unknown author'}</p>
-                  <p class="text-sm text-gray-500 mt-1">{text.source || 'No source'}</p>
-                  <div class="flex items-center mt-2 space-x-4">
-                    <span class="text-xs text-gray-500">
-                      Created: {new Date(text.createdAt).toLocaleDateString()}
-                    </span>
-                    <span class="text-xs text-gray-500">
-                      Status: {text.isActive ? 'Active' : 'Inactive'}
-                    </span>
+              <div class="flex items-center">
+                <svg class="w-5 h-5 text-primary-500 mr-3 flex-shrink-0 transition-transform {isExpanded ? 'rotate-90' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                </svg>
+                <div>
+                  <h4 class="text-sm font-medium text-gray-900">{lesson.title}</h4>
+                  <div class="flex items-center space-x-3 mt-0.5 text-xs text-gray-500">
+                    <span>{lessonGroups.length} group(s)</span>
+                    <span>{lessonTexts.length} reading</span>
+                    <span>{lessonExercises.length} ticket(s)</span>
                   </div>
                 </div>
-                <div class="ml-4">
-                  <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                  </svg>
-                </div>
               </div>
-            </div>
-          {:else}
-            <!-- Teacher/Admin view: card with buttons -->
-            <div class="border border-gray-200 rounded-lg p-4">
-              <div class="flex items-center justify-between">
-                <div class="flex-1">
-                  <h4 class="text-sm font-medium text-gray-900">{text.title}</h4>
-                  <p class="text-sm text-gray-500 mt-1">{text.author || 'Unknown author'}</p>
-                  <p class="text-sm text-gray-500 mt-1">{text.source || 'No source'}</p>
-                  <div class="flex items-center mt-2 space-x-4">
-                    <span class="text-xs text-gray-500">
-                      Created: {new Date(text.createdAt).toLocaleDateString()}
-                    </span>
-                    <span class="text-xs text-gray-500">
-                      Status: {text.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-                </div>
-                <div class="flex items-center space-x-2">
-                  <Button variant="secondary" size="sm" on:click={() => goto(`/reading-texts/${text.id}/edit`)}>
-                    Edit
-                  </Button>
-                  <Button variant="primary" size="sm" on:click={() => goto(`/reading-texts/${text.id}`)}>
-                    View & Annotate
-                  </Button>
-                </div>
+              <span class="text-xs text-gray-400">{isExpanded ? 'Collapse' : 'Expand'}</span>
+            </button>
+
+            <!-- Lesson Content (expandable) -->
+            {#if isExpanded}
+              {@const visibleGroups = $authStore.user?.role === 'STUDENT' ? lessonGroups.filter((g: any) => joinedGroupIds.has(g.id)) : lessonGroups}
+              <div class="p-4 space-y-3">
+                <!-- Groups in this lesson -->
+                {#if visibleGroups.length > 0}
+                  {#each visibleGroups as group}
+                    {@const groupTexts = readingTexts.filter((t: any) => t.groupId === group.id)}
+                    <div class="border border-purple-200 rounded-lg overflow-hidden">
+                      <div class="flex items-center justify-between p-3 bg-purple-50">
+                        <div class="flex items-center min-w-0 flex-1">
+                          <svg class="w-4 h-4 text-purple-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                          </svg>
+                          <div class="min-w-0">
+                            <p class="text-sm font-medium text-gray-900 truncate">{group.name}</p>
+                            <p class="text-xs text-gray-500">{group._count?.members || 0} members &middot; {group._count?.readingTexts || 0} materials</p>
+                          </div>
+                        </div>
+                        {#if $authStore.user?.role === 'STUDENT'}
+                          {#if joinedGroupIds.has(group.id)}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 ml-2">Joined</span>
+                          {:else if lessonGroups.some((g: any) => joinedGroupIds.has(g.id))}
+                            <span class="text-xs text-gray-400 ml-2">Already joined another group</span>
+                          {:else}
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              disabled={joinGroupLoading}
+                              on:click={() => handleJoinGroup(group.id)}
+                            >
+                              {joinGroupLoading ? 'Joining...' : 'Join'}
+                            </Button>
+                          {/if}
+                        {/if}
+                      </div>
+                      <!-- Group Reading Texts (for joined members or teacher) -->
+                      {#if groupTexts.length > 0 && ($authStore.user?.role !== 'STUDENT' || joinedGroupIds.has(group.id))}
+                        <div class="px-3 py-2 space-y-1 bg-white border-t border-purple-100">
+                          {#each groupTexts as text}
+                            {#if $authStore.user?.role === 'STUDENT'}
+                              {@const sStatus = getScheduleStatus(text)}
+                              {#if sStatus === 'scheduled'}
+                                <div class="flex items-center p-2 bg-gray-100 rounded opacity-70 cursor-not-allowed">
+                                  <svg class="w-3 h-3 text-gray-400 mr-1.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  <span class="text-xs text-gray-500 truncate">{text.title}</span>
+                                  <span class="ml-1 text-[9px] text-yellow-700 bg-yellow-100 px-1 rounded">Scheduled</span>
+                                </div>
+                              {:else if sStatus === 'closed'}
+                                <div class="flex items-center p-2 bg-gray-100 rounded opacity-60 cursor-not-allowed">
+                                  <svg class="w-3 h-3 text-gray-400 mr-1.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  <span class="text-xs text-gray-500 truncate">{text.title}</span>
+                                  <span class="ml-1 text-[9px] text-red-700 bg-red-100 px-1 rounded">Closed</span>
+                                </div>
+                              {:else}
+                                <div
+                                  class="flex items-center p-2 bg-blue-50 rounded cursor-pointer hover:bg-blue-100 transition-colors"
+                                  on:click={() => goto(`/reading-texts/${text.id}`)}
+                                  role="button"
+                                  tabindex="0"
+                                  on:keydown={(e) => e.key === 'Enter' && goto(`/reading-texts/${text.id}`)}
+                                >
+                                  <svg class="w-3 h-3 text-blue-500 mr-1.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                  </svg>
+                                  <span class="text-xs text-gray-700 truncate">{text.title}</span>
+                                  <svg class="w-3 h-3 text-gray-400 ml-auto flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                  </svg>
+                                </div>
+                              {/if}
+                            {:else}
+                              <div class="flex items-center justify-between p-2 bg-blue-50 rounded">
+                                <div class="flex items-center min-w-0 flex-1">
+                                  <svg class="w-3 h-3 text-blue-500 mr-1.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                  </svg>
+                                  <span class="text-xs text-gray-700 truncate">{text.title}</span>
+                                </div>
+                                <div class="flex space-x-2 ml-2">
+                                  <Button variant="secondary" size="sm" on:click={() => goto(`/reading-texts/${text.id}/edit`)}>Edit</Button>
+                                  <Button variant="primary" size="sm" on:click={() => goto(`/reading-texts/${text.id}`)}>View</Button>
+                                </div>
+                              </div>
+                            {/if}
+                          {/each}
+                          <!-- Group Exit Tickets (linked via readingText.groupId) -->
+                          {#each lessonExercises.filter((e: any) => groupTexts.some((t: any) => t.id === e.readingTextId)) as exercise}
+                            {#if $authStore.user?.role === 'STUDENT'}
+                              <div
+                                class="flex items-center p-2 bg-yellow-50 rounded cursor-pointer hover:bg-yellow-100 transition-colors"
+                                on:click={() => handleExerciseClick(exercise)}
+                                role="button"
+                                tabindex="0"
+                                on:keydown={(e) => e.key === 'Enter' && handleExerciseClick(exercise)}
+                              >
+                                <svg class="w-3 h-3 text-yellow-500 mr-1.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                </svg>
+                                <span class="text-xs text-gray-700 truncate">{exercise.title}</span>
+                                <svg class="w-3 h-3 text-gray-400 ml-auto flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                </svg>
+                              </div>
+                            {:else}
+                              <div class="flex items-center justify-between p-2 bg-yellow-50 rounded">
+                                <div class="flex items-center min-w-0 flex-1">
+                                  <svg class="w-3 h-3 text-yellow-500 mr-1.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                  </svg>
+                                  <span class="text-xs text-gray-700 truncate">{exercise.title}</span>
+                                </div>
+                                <div class="flex space-x-2 ml-2">
+                                  <Button variant="secondary" size="sm" on:click={() => goto(`/exercises/${exercise.id}/edit`)}>Edit</Button>
+                                  <Button variant="primary" size="sm" on:click={() => goto(`/submissions/${exercise.id}`)}>View</Button>
+                                </div>
+                              </div>
+                            {/if}
+                          {/each}
+                        </div>
+                      {/if}
+                      {#if $authStore.user?.role === 'STUDENT' && !joinedGroupIds.has(group.id) && (groupTexts.length > 0 || lessonExercises.filter((e: any) => groupTexts.some((t: any) => t.id === e.readingTextId)).length > 0)}
+                        <div class="px-3 py-2 bg-gray-50 border-t border-purple-100">
+                          <p class="text-xs text-gray-400 text-center">Join this group to access {groupTexts.length} reading material{groupTexts.length > 1 ? 's' : ''}{groupTexts.length > 0 && lessonExercises.filter((e: any) => groupTexts.some((t: any) => t.id === e.readingTextId)).length > 0 ? ' & ' : ''}{lessonExercises.filter((e: any) => groupTexts.some((t: any) => t.id === e.readingTextId)).length} exit ticket{lessonExercises.filter((e: any) => groupTexts.some((t: any) => t.id === e.readingTextId)).length > 1 ? 's' : ''}</p>
+                        </div>
+                      {/if}
+                    </div>
+                  {/each}
+                {/if}
+
+                {#if lessonTexts.length > 0}
+                  {#each lessonTexts as text}
+                    {#if $authStore.user?.role === 'STUDENT'}
+                      {@const sStatus = getScheduleStatus(text)}
+                      {#if sStatus === 'scheduled'}
+                        <!-- Scheduled: disabled card -->
+                        <div class="flex items-center justify-between p-3 bg-gray-100 border border-gray-200 rounded-lg opacity-70 cursor-not-allowed">
+                          <div class="flex items-center min-w-0 flex-1">
+                            <svg class="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <div class="min-w-0">
+                              <p class="text-sm font-medium text-gray-500 truncate">{text.title}</p>
+                              <p class="text-xs text-yellow-600">Opens: {formatScheduleDate(text.openAt)}</p>
+                            </div>
+                          </div>
+                          <span class="text-[10px] text-yellow-700 bg-yellow-100 px-2 py-0.5 rounded-full ml-2">Scheduled</span>
+                        </div>
+                      {:else if sStatus === 'closed'}
+                        <!-- Closed: disabled card -->
+                        <div class="flex items-center justify-between p-3 bg-gray-100 border border-gray-200 rounded-lg opacity-60 cursor-not-allowed">
+                          <div class="flex items-center min-w-0 flex-1">
+                            <svg class="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <div class="min-w-0">
+                              <p class="text-sm font-medium text-gray-500 truncate">{text.title}</p>
+                              <p class="text-xs text-red-500">Closed: {formatScheduleDate(text.closeAt)}</p>
+                            </div>
+                          </div>
+                          <span class="text-[10px] text-red-700 bg-red-100 px-2 py-0.5 rounded-full ml-2">Closed</span>
+                        </div>
+                      {:else}
+                        <!-- Active/Open: clickable -->
+                        <div
+                          class="flex items-center justify-between p-3 bg-blue-50 border border-blue-100 rounded-lg cursor-pointer hover:border-primary-300 transition-all"
+                          on:click={() => goto(`/reading-texts/${text.id}`)}
+                          role="button"
+                          tabindex="0"
+                          on:keydown={(e) => e.key === 'Enter' && goto(`/reading-texts/${text.id}`)}
+                        >
+                          <div class="flex items-center min-w-0 flex-1">
+                            <svg class="w-4 h-4 text-blue-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <div class="min-w-0">
+                              <p class="text-sm font-medium text-gray-900 truncate">{text.title}</p>
+                              <p class="text-xs text-gray-500">{text.author || 'Unknown author'}</p>
+                            </div>
+                          </div>
+                          {#if sStatus === 'open' && text.closeAt}
+                            <span class="text-[10px] text-gray-500 mr-2">Closes: {formatScheduleDate(text.closeAt)}</span>
+                          {/if}
+                          <svg class="w-4 h-4 text-gray-400 ml-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                      {/if}
+                    {:else}
+                      <div class="flex items-center justify-between p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                        <div class="flex items-center min-w-0 flex-1">
+                          <svg class="w-4 h-4 text-blue-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <span class="text-sm font-medium text-gray-900 truncate">{text.title}</span>
+                        </div>
+                        <div class="flex space-x-2 ml-2">
+                          <Button variant="secondary" size="sm" on:click={() => goto(`/reading-texts/${text.id}/edit`)}>Edit</Button>
+                          <Button variant="primary" size="sm" on:click={() => goto(`/reading-texts/${text.id}`)}>View</Button>
+                        </div>
+                      </div>
+                    {/if}
+                  {/each}
+                {/if}
+
+                {#if lessonExercises.filter((e: any) => !readingTexts.some((t: any) => t.groupId && t.lessonId === lesson.id && t.id === e.readingTextId)).length > 0}
+                  {#each lessonExercises.filter((e: any) => !readingTexts.some((t: any) => t.groupId && t.lessonId === lesson.id && t.id === e.readingTextId)) as exercise}
+                    {#if $authStore.user?.role === 'STUDENT'}
+                      <div
+                        class="flex items-center justify-between p-3 bg-yellow-50 border border-yellow-100 rounded-lg cursor-pointer hover:border-yellow-300 transition-all"
+                        on:click={() => handleExerciseClick(exercise)}
+                        role="button"
+                        tabindex="0"
+                        on:keydown={(e) => e.key === 'Enter' && handleExerciseClick(exercise)}
+                      >
+                        <div class="flex items-center min-w-0 flex-1">
+                          <svg class="w-4 h-4 text-yellow-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                          </svg>
+                          <div class="min-w-0">
+                            <p class="text-sm font-medium text-gray-900 truncate">{exercise.title}</p>
+                            <p class="text-xs text-gray-500">{exercise.description || 'Exit Ticket'}</p>
+                          </div>
+                        </div>
+                        <svg class="w-4 h-4 text-gray-400 ml-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                        </svg>
+                      </div>
+                    {:else}
+                      <div class="flex items-center justify-between p-3 bg-yellow-50 border border-yellow-100 rounded-lg">
+                        <div class="flex items-center min-w-0 flex-1">
+                          <svg class="w-4 h-4 text-yellow-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                          </svg>
+                          <span class="text-sm font-medium text-gray-900 truncate">{exercise.title}</span>
+                        </div>
+                        <div class="flex space-x-2 ml-2">
+                          <Button variant="secondary" size="sm" on:click={() => goto(`/exercises/${exercise.id}/edit`)}>Edit</Button>
+                          <Button variant="primary" size="sm" on:click={() => goto(`/submissions/${exercise.id}`)}>View</Button>
+                        </div>
+                      </div>
+                    {/if}
+                  {/each}
+                {/if}
+
+                {#if lessonTexts.length === 0 && lessonExercises.length === 0 && lessonGroups.length === 0}
+                  <p class="text-xs text-gray-400 text-center py-2">No content in this lesson yet.</p>
+                {/if}
               </div>
-            </div>
-          {/if}
+            {/if}
+          </div>
         {/each}
       </div>
     {:else}
       <div class="text-center py-12">
         <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
         </svg>
-        <h3 class="mt-2 text-sm font-medium text-gray-900">No reading materials yet</h3>
-        <p class="mt-1 text-sm text-gray-500">Add reading materials for this class to get started.</p>
-        {#if $authStore.user?.role === 'TEACHER' || $authStore.user?.role === 'ADMIN'}
-          <div class="mt-6">
-            <Button 
-              variant="primary" 
-              size="sm" 
-              on:click={() => goto(`/reading-texts/create?classId=${classData.id}`)}
-            >
-              Add Material
-            </Button>
+        <h3 class="mt-2 text-sm font-medium text-gray-900">No lessons yet</h3>
+        <p class="mt-1 text-sm text-gray-500">Lessons will appear here once created by the teacher.</p>
+      </div>
+    {/if}
+  </div>
+{/snippet}
+
+<!-- Groups Tab -->
+{#snippet groupsTab()}
+  <div class="card p-4 sm:p-6">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+      <div>
+        <h3 class="text-lg font-semibold text-gray-900">Groups ({groups.length})</h3>
+        <p class="text-xs sm:text-sm text-gray-500 mt-1">Join a group to collaborate on assignments</p>
+      </div>
+    </div>
+
+    {#if groups.length > 0}
+      {#snippet groupCard(group: any)}
+        <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-1 hover:border-primary-200 transition-all duration-200">
+          <div class="flex items-start justify-between mb-3">
+            <div>
+              <h4 class="text-base font-semibold text-gray-900">{group.name}</h4>
+              {#if group.description}
+                <p class="text-sm text-gray-600 mt-1">{group.description}</p>
+              {/if}
+            </div>
+            {#if joinedGroupIds.has(group.id)}
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                Joined
+              </span>
+            {/if}
+          </div>
+
+          <div class="flex items-center justify-between mt-4">
+            <div class="text-sm text-gray-500">
+              <span class="font-medium">{group._count?.members || 0}</span> members
+            </div>
+
+            {#if !joinedGroupIds.has(group.id)}
+              {@const alreadyJoinedLesson = group.lessonId && groups.filter((g: any) => g.lessonId === group.lessonId).some((g: any) => joinedGroupIds.has(g.id))}
+              {#if alreadyJoinedLesson}
+                <span class="text-xs text-gray-400">Already joined another group in this lesson</span>
+              {:else}
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={joinGroupLoading}
+                  on:click={() => handleJoinGroup(group.id)}
+                >
+                  {joinGroupLoading ? 'Joining...' : 'Join Group'}
+                </Button>
+              {/if}
+            {:else}
+              <div class="text-xs text-gray-500">
+                You're a member of this group
+              </div>
+            {/if}
+          </div>
+
+          {#if group._count?.readingTexts > 0}
+            <div class="mt-3 pt-3 border-t border-gray-100">
+              <p class="text-xs text-gray-500">
+                <span class="font-medium">{group._count.readingTexts}</span> reading materials assigned
+              </p>
+            </div>
+          {/if}
+        </div>
+      {/snippet}
+
+      <div class="space-y-8">
+        {#each lessons as lesson}
+          {@const lessonGroups = groups.filter((g: any) => g.lessonId === lesson.id)}
+          {#if lessonGroups.length > 0}
+            <div>
+              <div class="flex items-center mb-4">
+                <h4 class="text-md font-semibold text-gray-800">{lesson.title}</h4>
+                <div class="ml-4 flex-grow border-t border-gray-200"></div>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {#each lessonGroups as group}
+                  {@render groupCard(group)}
+                {/each}
+              </div>
+            </div>
+          {/if}
+        {/each}
+
+        {#if groups.some((g: any) => !g.lessonId)}
+          {@const unassignedGroups = groups.filter((g: any) => !g.lessonId)}
+          <div>
+            <div class="flex items-center mb-4">
+              <h4 class="text-md font-semibold text-gray-800">Class-wide Groups</h4>
+              <div class="ml-4 flex-grow border-t border-gray-200"></div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {#each unassignedGroups as group}
+                {@render groupCard(group)}
+              {/each}
+            </div>
           </div>
         {/if}
+      </div>
+    {:else}
+      <div class="text-center py-12">
+        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+        </svg>
+        <h3 class="mt-2 text-sm font-medium text-gray-900">No groups yet</h3>
+        <p class="mt-1 text-sm text-gray-500">The teacher hasn't created any groups for this class yet.</p>
       </div>
     {/if}
   </div>

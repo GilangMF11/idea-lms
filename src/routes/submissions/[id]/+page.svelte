@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import { authStore } from '$lib/stores/auth.js';
   import Button from '$lib/components/Button.svelte';
+  import { sanitizeHtml } from '$lib/sanitize.js';
 
   let exercise: any = null;
   let loading = true;
@@ -34,6 +35,16 @@
   let timerStorageKey: string | null = null;
   let timerPaused = false;
   let tabVisible = true;
+
+  function countWords(text: string): number {
+    return text.trim().split(/\s+/).filter(w => w.length > 0).length;
+  }
+
+  $: wordCount = countWords(submissionForm.answer);
+  $: minWords = exercise?.minWords || 0;
+  $: maxWords = exercise?.maxWords || 0;
+  $: hasWordLimit = minWords > 0 || maxWords > 0;
+  $: wordCountValid = hasWordLimit ? (wordCount >= minWords && (maxWords === 0 || wordCount <= maxWords)) : true;
 
   onMount(async () => {
     authStore.init();
@@ -90,11 +101,11 @@
         initExerciseTimer(exercise.timerDuration ?? 0);
       } else {
         const errorData = await response.json();
-        error = errorData.error || 'Failed to load exercise';
+        error = errorData.error || 'Failed to load exit ticket';
       }
     } catch (err) {
-      console.error('Error loading exercise:', err);
-      error = 'Error loading exercise';
+      console.error('Error loading exit ticket:', err);
+      error = 'Error loading exit ticket';
     } finally {
       loading = false;
     }
@@ -167,11 +178,11 @@
         await loadSubmissions();
       } else {
         const errorData = await response.json();
-        error = errorData.error || 'Failed to submit exercise';
+        error = errorData.error || 'Failed to submit exit ticket';
       }
     } catch (err) {
-      console.error('Error submitting exercise:', err);
-      error = 'Error submitting exercise';
+      console.error('Error submitting exit ticket:', err);
+      error = 'Error submitting exit ticket';
     } finally {
       submitting = false;
       timerAutoSubmitting = false;
@@ -576,7 +587,7 @@
           <div class="flex items-center min-w-0 flex-1">
             <div class="mr-2 sm:mr-4 flex-shrink-0">
               <Button variant="secondary" size="sm" on:click={goBack}>
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-4 h-4 mr-0 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                 </svg>
                 <span class="hidden sm:inline">Back</span>
@@ -635,7 +646,7 @@
               {/if}
             </div>
             <div class="prose prose-sm max-w-none text-gray-700 leading-relaxed">
-              {@html exercise.readingText.content.substring(0, 500)}
+              {@html sanitizeHtml(exercise.readingText.content.substring(0, 500))}
               {#if exercise.readingText.content.length > 500}
                 <span class="text-gray-500">...</span>
               {/if}
@@ -672,7 +683,7 @@
             {/if}
           </div>
           <div class="text-sm text-gray-700 leading-relaxed space-y-2">
-            {@html exercise.content}
+            {@html sanitizeHtml(exercise.content)}
           </div>
           {#if timerDurationSeconds > 0 && $authStore.user?.role === 'STUDENT'}
             <div class="flex items-center justify-between text-sm text-gray-700">
@@ -720,10 +731,10 @@
       </div>
     {/if}
 
-    <!-- Exercise Content -->
+    <!-- Exit Ticket Content -->
     {#if exercise && !loading && !error}
       <div class="card overflow-hidden">
-        <!-- Exercise Info -->
+        <!-- Exit Ticket Info -->
         <div class="bg-gray-50 px-6 py-4 border-b border-gray-200">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
@@ -780,7 +791,7 @@
         </div>
 
         <div class="p-6">
-          <!-- Exercise Content -->
+          <!-- Exit Ticket Content -->
           <div class="mb-8">
             <div class="flex items-center space-x-3 mb-6">
               <div class="w-8 h-8 bg-primary-100 rounded-lg flex items-center justify-center">
@@ -896,7 +907,7 @@
                   <svg class="w-5 h-5 mr-2 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
-                  Your Answer
+                  Your Summary
                 </h5>
                 <div class="bg-white rounded-lg p-4 border border-gray-200">
                   <div class="text-sm text-gray-700 whitespace-pre-wrap">{getCleanAnswer(submission.answer)}</div>
@@ -967,14 +978,14 @@
                   </svg>
                 </div>
                 <h4 class="text-xl font-semibold text-gray-900 mb-3">Ready to Submit?</h4>
-                <p class="text-gray-600 mb-8 max-w-md mx-auto">Submit your answer to complete this exercise and get feedback from your teacher.</p>
+                <p class="text-gray-600 mb-8 max-w-md mx-auto">Tulis summary kamu untuk menyelesaikan exit ticket ini.</p>
                 
                 {#if !showSubmissionForm && (!submission || submission.score === null)}
                   <Button variant="primary" size="lg" on:click={() => showSubmissionForm = true}>
                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
-                    Submit Answer
+                    Submit Summary
                   </Button>
                 {/if}
               </div>
@@ -989,100 +1000,65 @@
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
                   </div>
-                  <h4 class="text-xl font-semibold text-gray-900">Submit Your Answer</h4>
+                  <h4 class="text-xl font-semibold text-gray-900">Submit Summary</h4>
                 </div>
-                
+
                 <form on:submit|preventDefault={() => submitExercise()}>
                   <div class="space-y-6">
-                    <!-- Answer Text -->
+                    <!-- Summary Text -->
                     <div class="bg-white rounded-lg border border-gray-200 p-4">
                       <label for="answer" class="block text-sm font-semibold text-gray-700 mb-3">
                         <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
-                        Your Answer *
+                        Summary *
                       </label>
                       <textarea
                         id="answer"
                         bind:value={submissionForm.answer}
-                        rows="6"
+                        rows="8"
                         class="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
-                        placeholder="Write your detailed answer here..."
+                        placeholder="Tulis summary kamu di sini..."
                         required
                       ></textarea>
-                    </div>
 
-                    <!-- File Upload -->
-                    <div class="bg-white rounded-lg border border-gray-200 p-4">
-                      <label for="files" class="block text-sm font-semibold text-gray-700 mb-3">
-                        <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                        </svg>
-                        Attach Files (Optional)
-                      </label>
-                      <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary-400 transition-colors">
-                        <input
-                          id="files"
-                          type="file"
-                          multiple
-                          on:change={handleFileSelect}
-                          class="hidden"
-                          accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif"
-                        />
-                        <label for="files" class="cursor-pointer">
-                          <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                          </svg>
-                          <p class="text-sm text-gray-600 mb-2">Click to upload files or drag and drop</p>
-                          <p class="text-xs text-gray-500">PDF, DOC, DOCX, TXT, JPG, PNG, GIF (Max 10MB each)</p>
-                        </label>
-                      </div>
-                    </div>
-
-                    <!-- Selected Files -->
-                    {#if submissionForm.files.length > 0}
-                      <div class="bg-white rounded-lg border border-gray-200 p-4">
-                        <h5 class="text-sm font-semibold text-gray-700 mb-4 flex items-center">
-                          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
-                          Selected Files ({submissionForm.files.length})
-                        </h5>
-                        <div class="space-y-3">
-                          {#each submissionForm.files as file, index}
-                            <div class="flex items-center justify-between bg-gray-50 rounded-lg p-3 border border-gray-200">
-                              <div class="flex items-center">
-                                <div class="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center mr-3">
-                                  <svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                  </svg>
-                                </div>
-                                <div>
-                                  <span class="text-sm font-medium text-gray-900">{file.name}</span>
-                                  <span class="text-xs text-gray-500 ml-2">({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
-                                </div>
-                              </div>
-                              <button
-                                type="button"
-                                on:click={() => removeFile(index)}
-                                class="w-8 h-8 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg flex items-center justify-center transition-colors"
-                                aria-label="Remove file"
-                              >
-                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                              </button>
-                            </div>
-                          {/each}
+                      <!-- Word Counter -->
+                      {#if hasWordLimit}
+                        <div class="mt-2 flex items-center justify-between text-sm">
+                          <span class="text-gray-500">
+                            Jumlah kata: <span class={`font-semibold ${wordCountValid ? 'text-green-600' : (wordCount > 0 && wordCount < minWords) ? 'text-yellow-600' : 'text-red-600'}`}>{wordCount}</span>
+                          </span>
+                          <span class={`text-xs ${wordCountValid ? 'text-green-600' : 'text-gray-400'}`}>
+                            {#if minWords > 0 && maxWords > 0}
+                              Min: {minWords} / Max: {maxWords} kata
+                            {:else if minWords > 0}
+                              Minimal: {minWords} kata
+                            {:else}
+                              Maksimal: {maxWords} kata
+                            {/if}
+                          </span>
                         </div>
-                      </div>
-                    {/if}
+                        {#if !wordCountValid && wordCount > 0}
+                          <p class="mt-1 text-xs text-yellow-600">
+                            {#if wordCount < minWords}
+                              Summary masih kurang {minWords - wordCount} kata
+                            {:else if maxWords > 0 && wordCount > maxWords}
+                              Summary kelebihan {wordCount - maxWords} kata
+                            {/if}
+                          </p>
+                        {/if}
+                      {:else}
+                        <div class="mt-2 text-sm text-gray-400">
+                          Jumlah kata: {wordCount}
+                        </div>
+                      {/if}
+                    </div>
 
                     <!-- Submit Buttons -->
                     <div class="flex justify-end space-x-4 pt-6 border-t border-gray-200">
-                      <Button 
-                        type="button" 
-                        variant="secondary" 
+                      <Button
+                        type="button"
+                        variant="secondary"
                         on:click={() => showSubmissionForm = false}
                         disabled={submitting}
                       >
@@ -1091,10 +1067,10 @@
                         </svg>
                         Cancel
                       </Button>
-                      <Button 
-                        type="submit" 
+                      <Button
+                        type="submit"
                         variant="primary"
-                        disabled={submitting}
+                        disabled={submitting || (hasWordLimit && !wordCountValid)}
                       >
                         {#if submitting}
                           <svg class="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
@@ -1106,7 +1082,7 @@
                           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                           </svg>
-                          Submit Answer
+                          Submit Summary
                         {/if}
                       </Button>
                     </div>
@@ -1127,148 +1103,60 @@
                 
                 <form on:submit|preventDefault={() => updateSubmission()}>
                   <div class="space-y-6">
-                    <!-- Answer Text -->
+                    <!-- Summary Text -->
                     <div class="bg-white rounded-lg border border-gray-200 p-4">
                       <label for="edit-answer" class="block text-sm font-semibold text-gray-700 mb-3">
                         <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
-                        Your Answer *
+                        Summary *
                       </label>
                       <textarea
                         id="edit-answer"
                         bind:value={submissionForm.answer}
-                        rows="6"
+                        rows="8"
                         class="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
-                        placeholder="Write your detailed answer here..."
+                        placeholder="Tulis summary kamu di sini..."
                         required
                       ></textarea>
-                    </div>
 
-                    <!-- Existing Files -->
-                    {#if submissionForm.existingFiles && submissionForm.existingFiles.length > 0}
-                      <div class="bg-white rounded-lg border border-gray-200 p-4">
-                        <h5 class="text-sm font-semibold text-gray-700 mb-4 flex items-center">
-                          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
-                          Current Files ({submissionForm.existingFiles.length})
-                        </h5>
-                        <div class="space-y-3">
-                          {#each submissionForm.existingFiles as file, index}
-                            <div class="flex items-center justify-between bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg p-3 border border-gray-200">
-                              <div class="flex items-center">
-                                <div class="w-8 h-8 bg-gray-500 rounded-lg flex items-center justify-center mr-3">
-                                  <svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                  </svg>
-                                </div>
-                                <div>
-                                  <span class="text-sm font-medium text-gray-900">{file.name}</span>
-                                  <span class="text-xs text-gray-500 ml-2">({(file.size / 1024).toFixed(1)} KB)</span>
-                                </div>
-                              </div>
-                              <div class="flex items-center space-x-2">
-                                {#if canPreviewFile(file)}
-                                  <button
-                                    type="button"
-                                    on:click={() => viewFile(file)}
-                                    class="px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded text-xs font-medium transition-colors"
-                                  >
-                                    View
-                                  </button>
-                                {/if}
-                                <button
-                                  type="button"
-                                  on:click={() => downloadFile(file)}
-                                  class="px-2 py-1 bg-green-100 hover:bg-green-200 text-green-700 rounded text-xs font-medium transition-colors"
-                                >
-                                  Download
-                                </button>
-                              </div>
-                            </div>
-                          {/each}
+                      <!-- Word Counter -->
+                      {#if hasWordLimit}
+                        <div class="mt-2 flex items-center justify-between text-sm">
+                          <span class="text-gray-500">
+                            Jumlah kata: <span class={`font-semibold ${wordCountValid ? 'text-green-600' : (wordCount > 0 && wordCount < minWords) ? 'text-yellow-600' : 'text-red-600'}`}>{wordCount}</span>
+                          </span>
+                          <span class={`text-xs ${wordCountValid ? 'text-green-600' : 'text-gray-400'}`}>
+                            {#if minWords > 0 && maxWords > 0}
+                              Min: {minWords} / Max: {maxWords} kata
+                            {:else if minWords > 0}
+                              Minimal: {minWords} kata
+                            {:else}
+                              Maksimal: {maxWords} kata
+                            {/if}
+                          </span>
                         </div>
-                        <p class="text-xs text-gray-500 mt-2">
-                          <svg class="w-3 h-3 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          Current files will be kept. You can add new files below.
-                        </p>
-                      </div>
-                    {/if}
-
-                    <!-- File Upload -->
-                    <div class="bg-white rounded-lg border border-gray-200 p-4">
-                      <label for="edit-files" class="block text-sm font-semibold text-gray-700 mb-3">
-                        <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                        </svg>
-                        Add New Files (Optional)
-                      </label>
-                      <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
-                        <input
-                          id="edit-files"
-                          type="file"
-                          multiple
-                          on:change={handleFileSelect}
-                          class="hidden"
-                          accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif"
-                        />
-                        <label for="edit-files" class="cursor-pointer">
-                          <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                          </svg>
-                          <p class="text-sm text-gray-600 mb-2">Click to upload additional files</p>
-                          <p class="text-xs text-gray-500">PDF, DOC, DOCX, TXT, JPG, PNG, GIF (Max 10MB each)</p>
-                        </label>
-                      </div>
-                    </div>
-
-                    <!-- Selected Files -->
-                    {#if submissionForm.files.length > 0}
-                      <div class="bg-white rounded-lg border border-gray-200 p-4">
-                        <h5 class="text-sm font-semibold text-gray-700 mb-4 flex items-center">
-                          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
-                          New Files ({submissionForm.files.length})
-                        </h5>
-                        <div class="space-y-3">
-                          {#each submissionForm.files as file, index}
-                            <div class="flex items-center justify-between bg-gray-50 rounded-lg p-3 border border-gray-200">
-                              <div class="flex items-center">
-                                <div class="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center mr-3">
-                                  <svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                  </svg>
-                                </div>
-                                <div>
-                                  <span class="text-sm font-medium text-gray-900">{file.name}</span>
-                                  <span class="text-xs text-gray-500 ml-2">({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
-                                </div>
-                              </div>
-                              <button
-                                type="button"
-                                on:click={() => removeFile(index)}
-                                class="w-8 h-8 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg flex items-center justify-center transition-colors"
-                                aria-label="Remove file"
-                              >
-                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                              </button>
-                            </div>
-                          {/each}
+                        {#if !wordCountValid && wordCount > 0}
+                          <p class="mt-1 text-xs text-yellow-600">
+                            {#if wordCount < minWords}
+                              Summary masih kurang {minWords - wordCount} kata
+                            {:else if maxWords > 0 && wordCount > maxWords}
+                              Summary kelebihan {wordCount - maxWords} kata
+                            {/if}
+                          </p>
+                        {/if}
+                      {:else}
+                        <div class="mt-2 text-sm text-gray-400">
+                          Jumlah kata: {wordCount}
                         </div>
-                      </div>
-                    {/if}
+                      {/if}
+                    </div>
 
                     <!-- Submit Buttons -->
                     <div class="flex justify-end space-x-4 pt-6 border-t border-gray-200">
-                      <Button 
-                        type="button" 
-                        variant="secondary" 
+                      <Button
+                        type="button"
+                        variant="secondary"
                         on:click={cancelEdit}
                         disabled={editing}
                       >
@@ -1277,10 +1165,10 @@
                         </svg>
                         Cancel
                       </Button>
-                      <Button 
-                        type="submit" 
+                      <Button
+                        type="submit"
                         variant="primary"
-                        disabled={editing}
+                        disabled={editing || (hasWordLimit && !wordCountValid)}
                       >
                         {#if editing}
                           <svg class="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
@@ -1292,7 +1180,7 @@
                           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                           </svg>
-                          Update Submission
+                          Update Summary
                         {/if}
                       </Button>
                     </div>

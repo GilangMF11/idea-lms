@@ -52,6 +52,15 @@ model User {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  
+  // Tracking fields for email verification
+  isEmailVerified         Boolean   @default(false)
+  verificationToken       String?   @unique
+  verificationTokenExpiry DateTime?
+  
+  // Tracking fields for password reset
+  resetPasswordToken      String?   @unique
+  resetPasswordExpires    DateTime?
 
   // Relations
   classesAsStudent    ClassStudent[]
@@ -69,6 +78,7 @@ model User {
   finalProducts       FinalProduct[]
   groupMembers        GroupMember[]
   History             History[]
+  notifications       Notification[] @relation("UserNotifications")
 
   @@map("users")
 }
@@ -86,6 +96,7 @@ model Class {
   // Relations
   teacher         User             @relation(fields: [teacherId], references: [id])
   students        ClassStudent[]
+  lessons         Lesson[]
   readingTexts    ReadingText[]
   exercises       Exercise[]
   writingOutlines WritingOutline[]
@@ -97,6 +108,7 @@ model Class {
   finalProducts   FinalProduct[]
   groups          Group[]
   History         History[]
+  notifications   Notification[] @relation("ClassNotifications")
 
   @@map("classes")
 }
@@ -115,17 +127,39 @@ model ClassStudent {
   @@map("class_students")
 }
 
+model Lesson {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  classId     String
+  order       Int       @default(0)
+  scheduledAt DateTime?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  class        Class          @relation(fields: [classId], references: [id], onDelete: Cascade)
+  readingTexts ReadingText[]
+  exercises    Exercise[]
+  groups       Group[]
+
+  @@map("lessons")
+}
+
 model Group {
   id          String   @id @default(cuid())
   name        String
   description String?
   classId     String
+  lessonId    String?  // Optional - group bisa global per class atau spesifik per lesson
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   // Relations
   class        Class          @relation(fields: [classId], references: [id])
+  lesson       Lesson?        @relation(fields: [lessonId], references: [id])
   members      GroupMember[]
   readingTexts ReadingText[]
 
@@ -153,8 +187,11 @@ model ReadingText {
   content   String   @default("") // HTML or empty when using PDF
   pdfUrl    String?  // Optional: when set, display PDF instead of content; annotations work on PDF
   classId   String
+  lessonId  String   // FK ke Lesson
   groupId   String?  // Optional - untuk reading text yang dikelompokkan
   timerDuration Int? // Countdown timer in seconds (optional)
+  openAt       DateTime? // Schedule: when reading text becomes accessible
+  closeAt      DateTime? // Schedule: when reading text becomes inaccessible
   author    String?
   source    String?
   isActive  Boolean  @default(true)
@@ -163,6 +200,7 @@ model ReadingText {
 
   // Relations
   class       Class        @relation(fields: [classId], references: [id])
+  lesson      Lesson       @relation(fields: [lessonId], references: [id])
   group       Group?       @relation(fields: [groupId], references: [id])
   annotations Annotation[]
   exercises   Exercise[]
@@ -200,6 +238,13 @@ enum ChatMessageType {
   AUDIO
 }
 
+enum ChatType {
+  ASKING_QUESTION
+  ANSWERING_QUESTION
+  GIVING_NEW_IDEA
+  DISPUTING_IDEAS
+}
+
 model ChatMessage {
   id            String          @id @default(cuid())
   classId       String
@@ -209,6 +254,7 @@ model ChatMessage {
   audioUrl      String?
   audioDuration Int?
   annotationId  String?  // Optional - untuk discussion annotation
+  chatType      ChatType? @default(ASKING_QUESTION) // Type of discussion message
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -228,16 +274,20 @@ model Exercise {
   type          ExerciseType @default(INDIVIDUAL)
   readingTextId String?
   classId       String
+  lessonId      String       // FK ke Lesson
   dueDate       DateTime?
   isActive      Boolean      @default(true)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
   timerDuration Int?         // Timer in seconds
   autoSubmitOnTimeout Boolean @default(true)
+  minWords      Int?         // Minimum word count for summary (default 150)
+  maxWords      Int?         // Maximum word count for summary (default 200)
 
   // Relations
   readingText ReadingText?         @relation(fields: [readingTextId], references: [id])
   class       Class                @relation(fields: [classId], references: [id])
+  lesson      Lesson               @relation(fields: [lessonId], references: [id])
   submissions ExerciseSubmission[]
   timers      ExerciseTimer[]
 
@@ -431,4 +481,34 @@ model History {
   class Class? @relation(fields: [classId], references: [id])
 
   @@map("histories")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      String   @default("info") // 'info', 'success', 'warning', 'error'
+  isRead    Boolean  @default(false)
+  actionUrl String?
+  classId   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user      User     @relation("UserNotifications", fields: [userId], references: [id])
+  class     Class?   @relation("ClassNotifications", fields: [classId], references: [id])
+
+  @@map("notifications")
+}
+
+model SystemLog {
+  id        String   @id @default(cuid())
+  level     String
+  message   String
+  context   String?  // JSON string
+  error     String?  // Error stack trace
+  createdAt DateTime @default(now())
+
+  @@map("system_logs")
 }

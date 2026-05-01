@@ -49,7 +49,7 @@
       });
 
       if (!exercisesResponse.ok) {
-        throw new Error('Failed to load exercises');
+        throw new Error('Failed to load exit tickets');
       }
 
       const exercisesData = await exercisesResponse.json();
@@ -189,8 +189,8 @@
       });
 
     } catch (err) {
-      console.error('Error loading exercise submissions:', err);
-      error = 'Error loading exercise submissions';
+      console.error('Error loading exit ticket submissions:', err);
+      error = 'Error loading exit ticket submissions';
     }
   }
 
@@ -365,10 +365,10 @@
       </div>
     {/if}
 
-    <!-- Exercises List -->
+    <!-- Exit Tickets List -->
     {#if submissions.length > 0}
       <div class="space-y-4">
-        <h2 class="text-xl font-semibold text-gray-900">Exercises with Submissions</h2>
+        <h2 class="text-xl font-semibold text-gray-900">Exit Tickets with Submissions</h2>
         <div class="grid gap-6">
           {#each submissions as exercise}
             <button type="button" class="bg-white rounded-xl shadow-lg border border-gray-200 p-6 hover:shadow-xl hover:border-primary-300 transition-all duration-200 cursor-pointer w-full text-left group" 
@@ -464,7 +464,7 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
         <h3 class="text-lg font-medium text-gray-900 mb-2">No exercises with submissions yet</h3>
-        <p class="text-gray-600">Exercises with student submissions will appear here.</p>
+        <p class="text-gray-600">Exit Tickets with student submissions will appear here.</p>
       </div>
     {/if}
   </div>
@@ -609,7 +609,7 @@
   </div>
 {/if}
 
-<!-- Exercise Detail Modal -->
+<!-- Exit Ticket Detail Modal -->
 {#if showExerciseDetail && selectedExercise}
   <div 
     class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" 
@@ -653,9 +653,9 @@
           </button>
         </div>
 
-        <!-- Exercise Content -->
+        <!-- Exit Ticket Content -->
         <div class="bg-gray-50 rounded-lg p-4 mb-6">
-          <h4 class="text-sm font-medium text-gray-900 mb-2">Exercise Content</h4>
+          <h4 class="text-sm font-medium text-gray-900 mb-2">Exit Ticket Content</h4>
           <p class="text-sm text-gray-700 whitespace-pre-wrap">{selectedExercise.content}</p>
         </div>
 

@@ -9,23 +9,27 @@
   
   let email = '';
   let password = '';
+  let rememberMe = false;
   let error = '';
   let isLoading = false;
+  let isResending = false;
+  let resendSuccess = '';
+  let showResendVerification = false;
 
   // Check for OAuth errors in URL
   $: {
     const errorParam = $page.url.searchParams.get('error');
     if (errorParam) {
       if (errorParam === 'google_auth_failed') {
-        error = 'Autentikasi Google gagal';
+        error = 'Google authentication failed';
       } else if (errorParam === 'no_code') {
-        error = 'Kode autentikasi tidak ditemukan';
+        error = 'Authentication code not found';
       } else if (errorParam === 'token_exchange_failed') {
-        error = 'Gagal menukar kode autentikasi';
+        error = 'Failed to exchange authentication code';
       } else if (errorParam === 'authentication_failed') {
-        error = 'Autentikasi gagal';
+        error = 'Authentication failed';
       } else if (errorParam === 'internal_error') {
-        error = 'Terjadi kesalahan internal';
+        error = 'An internal error occurred';
       }
     }
   }
@@ -41,22 +45,56 @@
   
   async function handleLogin() {
     if (!email || !password) {
-      error = 'Mohon lengkapi semua field';
+      error = 'Please fill in all fields';
       return;
     }
     
     isLoading = true;
     error = '';
+    resendSuccess = '';
+    showResendVerification = false;
     
-    const result = await authStore.login(email, password);
+    const result = await authStore.login(email, password, rememberMe);
     
     if (result.success) {
       goto('/dashboard');
     } else {
       error = result.error || 'Login failed';
+      if (error === 'Please check your email and verify your account before logging in.') {
+        showResendVerification = true;
+      }
     }
     
     isLoading = false;
+  }
+
+  async function handleResendVerification() {
+    if (!email) return;
+
+    isResending = true;
+    error = '';
+    resendSuccess = '';
+
+    try {
+      const response = await fetch('/api/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        resendSuccess = data.message || 'Verification email resent. Please check your inbox.';
+        showResendVerification = false;
+      } else {
+        error = data.error || 'Failed to resend verification email.';
+      }
+    } catch (err) {
+      error = 'A network error occurred while resending. Please try again.';
+    } finally {
+      isResending = false;
+    }
   }
   
   function handleKeydown(event: Event) {
@@ -90,10 +128,31 @@
       </p>
     </div>
 
+    <!-- Success Alert -->
+    {#if resendSuccess}
+      <div class="mb-6">
+        <Alert type="success" message={resendSuccess} />
+      </div>
+    {/if}
+
     <!-- Error Alert -->
     {#if error}
       <div class="mb-6">
         <Alert type="error" message={error} />
+        {#if showResendVerification}
+          <div class="mt-3">
+            <Button
+              type="button"
+              variant="secondary"
+              fullWidth
+              size="sm"
+              loading={isResending}
+              on:click={handleResendVerification}
+            >
+              Haven't received email? Resend
+            </Button>
+          </div>
+        {/if}
       </div>
     {/if}
 
@@ -123,16 +182,17 @@
             id="remember-me"
             name="remember-me"
             type="checkbox"
+            bind:checked={rememberMe}
             class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
           />
           <label for="remember-me" class="ml-2 block text-sm text-gray-700">
-            Ingat saya
+            Remember me
           </label>
         </div>
 
         <div class="text-sm">
           <a href="/forgot-password" class="font-medium text-primary-600 hover:text-primary-500">
-            Lupa password?
+            Forgot password?
           </a>
         </div>
       </div>

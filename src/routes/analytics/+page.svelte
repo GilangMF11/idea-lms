@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import { authStore } from '$lib/stores/auth.js';
   import Button from '$lib/components/Button.svelte';
@@ -8,6 +8,11 @@
   let analytics: any = null;
   let loading = true;
   let error = '';
+
+  let activityChartNode: HTMLElement;
+  let engagementChartNode: HTMLElement;
+  let activityChart: any;
+  let engagementChart: any;
 
   onMount(() => {
     if (!$authStore.isAuthenticated) {
@@ -22,7 +27,8 @@
     try {
       loading = true;
       
-      const response = await fetch('/api/analytics', {
+      const type = $authStore.user?.role === 'ADMIN' ? 'system' : ($authStore.user?.role === 'TEACHER' ? 'teacher' : 'user');
+      const response = await fetch(`/api/analytics?type=${type}`, {
         headers: {
           'Authorization': `Bearer ${$authStore.token}`,
           'Content-Type': 'application/json'
@@ -31,7 +37,7 @@
 
       if (response.ok) {
         const data = await response.json();
-        analytics = data;
+        analytics = data.analytics;
       } else {
         error = 'Failed to load analytics data';
       }
@@ -40,8 +46,67 @@
       error = 'Failed to load analytics data';
     } finally {
       loading = false;
+      await tick();
+      if (analytics) {
+        renderCharts();
+      }
     }
   }
+
+  function renderCharts() {
+    if (!analytics) return;
+
+    import('apexcharts').then(module => {
+      const ApexCharts = module.default;
+
+      if (activityChartNode) {
+        const last7Days = Array.from({length: 7}).map((_, i) => {
+           const d = new Date();
+           d.setDate(d.getDate() - (6 - i));
+           return d.toLocaleDateString('en-US', {weekday: 'short'});
+        });
+        const activityOptions: import('apexcharts').ApexOptions = {
+          series: [{
+            name: $authStore.user?.role === 'ADMIN' ? 'New Users & Classes' : 'New Contents',
+            data: analytics.activityTrends || [0, 0, 0, 0, 0, 0, 0]
+          }],
+          chart: { type: 'area', height: 250, toolbar: { show: false } },
+          stroke: { curve: 'smooth', width: 2 },
+          xaxis: { categories: last7Days },
+          dataLabels: { enabled: false },
+        };
+        if (activityChart) activityChart.destroy();
+        activityChart = new ApexCharts(activityChartNode, activityOptions);
+        activityChart.render();
+      }
+
+      if (engagementChartNode) {
+        let series = [analytics.totalClasses || 0, analytics.totalReadingTexts || 0, analytics.totalExercises || 0];
+        let labels = ['Classes', 'Reading Texts', 'Exit Tickets'];
+
+        if ($authStore.user?.role === 'ADMIN') {
+            series = [analytics.totalClasses || 0, analytics.totalUsers || 0, analytics.totalReadingTexts || 0, analytics.totalExercises || 0];
+            labels = ['Classes', 'Users', 'Reading Texts', 'Exit Tickets'];
+        }
+
+        const engagementOptions: import('apexcharts').ApexOptions = {
+          series: series,
+          labels: labels,
+          chart: { type: 'donut', height: 250 },
+          legend: { position: 'bottom' },
+        };
+        
+        if (engagementChart) engagementChart.destroy();
+        engagementChart = new ApexCharts(engagementChartNode, engagementOptions);
+        engagementChart.render();
+      }
+    });
+  }
+
+  onDestroy(() => {
+    if (activityChart) activityChart.destroy();
+    if (engagementChart) engagementChart.destroy();
+  });
 
   function goBack() {
     goto('/dashboard');
@@ -116,8 +181,8 @@
                 </div>
               </div>
               <div class="ml-4">
-                <p class="text-sm font-medium text-gray-500">Total Students</p>
-                <p class="text-2xl font-semibold text-gray-900">{analytics.totalStudents || 0}</p>
+                <p class="text-sm font-medium text-gray-500">{$authStore.user?.role === 'ADMIN' ? 'Total Users' : 'Total Students'}</p>
+                <p class="text-2xl font-semibold text-gray-900">{$authStore.user?.role === 'ADMIN' ? (analytics.totalUsers || 0) : (analytics.totalStudents || 0)}</p>
               </div>
             </div>
           </div>
@@ -132,7 +197,7 @@
                 </div>
               </div>
               <div class="ml-4">
-                <p class="text-sm font-medium text-gray-500">Total Exercises</p>
+                <p class="text-sm font-medium text-gray-500">Total Exit Tickets</p>
                 <p class="text-2xl font-semibold text-gray-900">{analytics.totalExercises || 0}</p>
               </div>
             </div>
@@ -155,19 +220,19 @@
           </div>
         </div>
 
-        <!-- Charts Placeholder -->
+        <!-- Charts -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div class="bg-white rounded-lg shadow p-6">
             <h3 class="text-lg font-medium text-gray-900 mb-4">Activity Overview</h3>
-            <div class="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
-              <p class="text-gray-500">Chart visualization coming soon</p>
+            <div class="w-full flex items-center justify-center bg-white rounded-lg min-h-[250px]">
+              <div bind:this={activityChartNode} class="w-full"></div>
             </div>
           </div>
 
           <div class="bg-white rounded-lg shadow p-6">
-            <h3 class="text-lg font-medium text-gray-900 mb-4">User Engagement</h3>
-            <div class="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
-              <p class="text-gray-500">Chart visualization coming soon</p>
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Content Distribution</h3>
+            <div class="w-full flex items-center justify-center bg-white rounded-lg min-h-[250px]">
+              <div bind:this={engagementChartNode} class="w-full"></div>
             </div>
           </div>
         </div>
@@ -190,8 +255,8 @@
                       </div>
                     </div>
                     <div class="flex-1 min-w-0">
-                      <p class="text-sm text-gray-900">{activity.description}</p>
-                      <p class="text-xs text-gray-500">{new Date(activity.timestamp).toLocaleString()}</p>
+                      <p class="text-sm text-gray-900">{activity.title || activity.description || 'Unknown activity'}</p>
+                      <p class="text-xs text-gray-500">{new Date(activity.timestamp).toLocaleString()}{#if activity.user} &middot; {activity.user}{/if}</p>
                     </div>
                   </div>
                 {/each}

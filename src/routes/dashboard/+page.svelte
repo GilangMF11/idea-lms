@@ -10,11 +10,20 @@
   let showLogoutModal = false;
   let classes: any[] = [];
   let exercises: any[] = [];
+  let submissions: any[] = [];
   let readingTexts: any[] = [];
   let totalUsers = 0;
   let loading = true;
   let error = '';
   let classSearchQuery = '';
+
+  $: totalUniqueStudents = new Set(
+    classes.flatMap((cls: any) => 
+      Array.isArray(cls.students) 
+        ? cls.students.map((sc: any) => sc.studentId || sc.student?.id).filter(Boolean)
+        : []
+    )
+  ).size;
 
   $: filteredClasses = classSearchQuery.trim() === ''
     ? classes
@@ -27,59 +36,63 @@
   $: displayedClasses = filteredClasses.slice(0, 3);
   $: hasMoreClasses = filteredClasses.length > 3;
   
-  onMount(async () => {
-    authStore.init();
-    
-    // Sync auth from cookie if OAuth success
-    if ($page.url.searchParams.get('oauth_success') === 'true') {
-      try {
-        const response = await fetch('/api/auth/sync', {
-          credentials: 'include', // Important: include cookies
-        });
-        if (response.ok) {
-          const data = await response.json();
-          if (data.user && data.token) {
-            // Update auth store
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('auth_token', data.token);
-              localStorage.setItem('auth_user', JSON.stringify(data.user));
+  onMount(() => {
+    const initDashboard = async () => {
+      authStore.init();
+      
+      // Sync auth from cookie if OAuth success
+      if ($page.url.searchParams.get('oauth_success') === 'true') {
+        try {
+          const response = await fetch('/api/auth/sync', {
+            credentials: 'include', // Important: include cookies
+          });
+          if (response.ok) {
+            const data = await response.json();
+            if (data.user && data.token) {
+              // Update auth store
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('auth_token', data.token);
+                localStorage.setItem('auth_user', JSON.stringify(data.user));
+              }
+              // Re-init auth store to load from localStorage
+              authStore.init();
+              // Check if profile is complete
+              if (!data.profileComplete) {
+                goto('/complete-profile', { replaceState: true });
+                return;
+              }
+              // Profile complete: load dashboard data directly to avoid stuck loading
+              await loadDashboardData();
+              // Optionally clean up the URL (remove oauth_success) without re-running onMount
+              if (typeof window !== 'undefined') {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('oauth_success');
+                window.history.replaceState({}, '', url.toString());
+              }
+              return; // Exit early to prevent redirect to login / duplicate loading
             }
-            // Re-init auth store to load from localStorage
-            authStore.init();
-            // Check if profile is complete
-            if (!data.profileComplete) {
-              goto('/complete-profile', { replaceState: true });
-              return;
-            }
-            // Profile complete: load dashboard data directly to avoid stuck loading
-            await loadDashboardData();
-            // Optionally clean up the URL (remove oauth_success) without re-running onMount
-            if (typeof window !== 'undefined') {
-              const url = new URL(window.location.href);
-              url.searchParams.delete('oauth_success');
-              window.history.replaceState({}, '', url.toString());
-            }
-            return; // Exit early to prevent redirect to login / duplicate loading
+          } else {
+            console.error('Auth sync failed:', await response.text());
           }
-        } else {
-          console.error('Auth sync failed:', await response.text());
+        } catch (err) {
+          console.error('Auth sync error:', err);
         }
-      } catch (err) {
-        console.error('Auth sync error:', err);
       }
-    }
-    
-    // Redirect to login if not authenticated
-    if (!$authStore.isAuthenticated) {
-      goto('/login');
-      return;
-    }
+      
+      // Redirect to login if not authenticated
+      if (!$authStore.isAuthenticated) {
+        goto('/login');
+        return;
+      }
 
-    // Check if profile is complete before loading dashboard
-    await checkProfileComplete();
-    
-    // Load dashboard data based on user role
-    loadDashboardData();
+      // Check if profile is complete before loading dashboard
+      await checkProfileComplete();
+      
+      // Load dashboard data based on user role
+      loadDashboardData();
+    };
+
+    initDashboard();
     
     // Close dropdown when clicking outside
     function handleClickOutside(event: Event) {
@@ -162,10 +175,26 @@
             'Content-Type': 'application/json'
           }
         });
-        
+
         if (exercisesResponse.ok) {
           const exercisesData = await exercisesResponse.json();
           exercises = exercisesData.exercises || [];
+        }
+
+        // Fetch all submissions for this student
+        try {
+          const subsResponse = await fetch('/api/exercise-submissions/all', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          if (subsResponse.ok) {
+            const subsData = await subsResponse.json();
+            submissions = subsData.submissions || [];
+          }
+        } catch (err) {
+          console.error('Error loading submissions:', err);
         }
       } else if (classes.length > 0) {
         // For teachers/admins, fetch from first class
@@ -219,7 +248,25 @@
       loading = false;
     }
   }
-  
+
+  function getExerciseStatus(exercise: any): { label: string; color: string } {
+    const sub = submissions.find((s: any) => s.exerciseId === exercise.id);
+    const isOverdue = exercise.dueDate && new Date() > new Date(exercise.dueDate);
+
+    if (sub) {
+      if (sub.score !== null) {
+        return { label: `Graded: ${sub.score}/100`, color: 'bg-green-100 text-green-800' };
+      }
+      return { label: 'Submitted', color: 'bg-blue-100 text-blue-800' };
+    }
+
+    if (isOverdue) {
+      return { label: 'Overdue', color: 'bg-red-100 text-red-800' };
+    }
+
+    return { label: 'Not Started', color: 'bg-yellow-100 text-yellow-800' };
+  }
+
   function handleLogout() {
     showLogoutModal = true;
     showUserMenu = false;
@@ -596,40 +643,41 @@
 
     <!-- Recent Exit Tickets -->
     <div class="card p-6">
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-        <h3 class="text-lg font-semibold text-gray-900">Recent Exit Tickets</h3>
+      <div class="flex items-center justify-between mb-5">
+        <h3 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Exit Tickets</h3>
         {#if exercises.length > 3}
-          <Button variant="secondary" size="sm" on:click={() => goto('/exit-tickets')}>
-            Show all
-          </Button>
+          <button
+            type="button"
+            class="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            on:click={() => goto('/exit-tickets')}
+          >See all</button>
         {/if}
       </div>
+
       {#if exercises.length > 0}
-        <div class="space-y-3">
-          {#each exercises.slice(0, 3) as exercise}
+        <div class="space-y-1">
+          {#each exercises.slice(0, 4) as exercise}
+            {@const status = getExerciseStatus(exercise)}
             <button
               type="button"
-              class="w-full flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors text-left"
+              class="w-full flex items-center justify-between py-3 px-2 rounded-lg text-left hover:bg-gray-50 transition-colors group"
               on:click={() => goto(`/submissions/${exercise.id}`)}
             >
-              <div class="flex-1">
-                <p class="text-sm font-medium text-gray-900">{exercise.title}</p>
-                <p class="text-xs text-gray-500">{exercise.description || 'No description'}</p>
+              <div class="flex items-center gap-3 min-w-0 flex-1">
+                <div class="w-1.5 h-1.5 rounded-full flex-shrink-0 {status.label.startsWith('Graded') ? 'bg-green-500' : status.label === 'Submitted' ? 'bg-blue-500' : status.label === 'Overdue' ? 'bg-red-500' : 'bg-yellow-400'}"></div>
+                <div class="min-w-0">
+                  <p class="text-sm text-gray-800 truncate">{exercise.title}</p>
+                  <p class="text-xs text-gray-400">{exercise.class?.name || ''}{#if exercise.dueDate} &middot; {new Date(exercise.dueDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}{/if}</p>
+                </div>
               </div>
-              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 ml-3">
-                Pending
+              <span class="text-xs text-gray-400 flex-shrink-0 ml-3 {status.label.startsWith('Graded') ? '!text-green-600' : status.label === 'Submitted' ? '!text-blue-600' : status.label === 'Overdue' ? '!text-red-500' : ''}">
+                {status.label}
               </span>
             </button>
           {/each}
         </div>
       {:else}
-        <div class="text-center py-8">
-          <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <h3 class="mt-2 text-sm font-medium text-gray-900">No exit tickets yet</h3>
-          <p class="mt-1 text-sm text-gray-500">Exit tickets will appear here when your teachers post them.</p>
-        </div>
+        <p class="text-sm text-gray-400 text-center py-6">Belum ada exit ticket.</p>
       {/if}
     </div>
   </div>
@@ -717,16 +765,15 @@
         </div>
         <div class="ml-4">
           <p class="text-sm font-medium text-gray-600">Total Students</p>
-          <p class="text-2xl font-semibold text-gray-900">{classes.reduce((total, cls) => total + (cls._count?.students || 0), 0)}</p>
+          <p class="text-2xl font-semibold text-gray-900">{totalUniqueStudents}</p>
         </div>
       </div>
     </div>
   </div>
 
   <!-- Main Content Grid -->
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-    <!-- My Classes (Teacher) -->
-    <div class="card p-6">
+  <!-- My Classes (Teacher) -->
+  <div class="card p-6">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
         <h3 class="text-lg font-semibold text-gray-900">My Classes</h3>
         {#if hasMoreClasses}
@@ -755,21 +802,35 @@
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
           {#each displayedClasses as classItem (classItem.id)}
-            <button
-              type="button"
-              class="block w-full text-left overflow-hidden rounded-xl border border-gray-200 bg-white hover:border-primary-300 hover:shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 cursor-pointer"
-              on:click={() => goto(`/classes/${classItem.id}/manage`)}
-            >
+            <div class="block w-full overflow-hidden rounded-xl border border-gray-200 bg-white hover:border-primary-300 hover:shadow-md transition-all">
               <div class="h-28 bg-primary-100 flex items-center justify-center">
                 <svg class="w-12 h-12 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                 </svg>
               </div>
-              <div class="p-5 text-center">
-                <p class="font-semibold text-gray-900 truncate w-full">{classItem.name || 'Unnamed Class'}</p>
-                <p class="text-sm text-gray-500 mt-1">{classItem._count?.students ?? 0} students</p>
+              <div class="p-5">
+                <div class="text-center mb-3">
+                  <p class="font-semibold text-gray-900 truncate w-full">{classItem.name || 'Unnamed Class'}</p>
+                  <p class="text-sm text-gray-500 mt-1">{classItem._count?.students ?? 0} students</p>
+                </div>
+                <div class="flex gap-2">
+                  <button
+                    type="button"
+                    class="flex-1 px-3 py-2 text-sm font-medium text-primary-600 bg-primary-50 rounded-lg hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                    on:click={() => goto(`/classes/${classItem.id}/manage`)}
+                  >
+                    Manage
+                  </button>
+                  <button
+                    type="button"
+                    class="flex-1 px-3 py-2 text-sm font-medium text-purple-600 bg-purple-50 rounded-lg hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+                    on:click={() => goto(`/classes/${classItem.id}/chat-statistics`)}
+                  >
+                    Analysis
+                  </button>
+                </div>
               </div>
-            </button>
+            </div>
           {/each}
         </div>
         {#if filteredClasses.length === 0}
@@ -791,18 +852,6 @@
       {/if}
     </div>
 
-    <!-- Recent Activity -->
-    <div class="card p-6">
-      <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
-      <div class="space-y-4">
-        <div class="flex items-center text-sm text-gray-500">
-          <div class="w-2 h-2 bg-gray-300 rounded-full mr-3"></div>
-          No recent activity
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- Quick Actions -->
   <div class="mt-8">
     <div class="card p-6">
@@ -820,11 +869,11 @@
           </svg>
           Add Reading Text
         </Button>
-        <Button variant="secondary" size="md" fullWidth on:click={() => goto('/exercises/create')}>
+        <Button variant="secondary" size="md" fullWidth on:click={() => goto('/teacher/exit-tickets')}>
           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          Create Exit Ticket
+          Exit Tickets
         </Button>
         <Button variant="secondary" size="md" fullWidth on:click={() => goto('/analytics')}>
           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -899,56 +948,50 @@
   </div>
 
   <!-- Main Content Grid -->
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-    <!-- System Overview -->
-    <div class="card p-6">
-      <h3 class="text-lg font-semibold text-gray-900 mb-4">System Overview</h3>
-      <div class="space-y-4">
-        <div class="flex items-center justify-between">
-          <span class="text-sm text-gray-600">Database Status</span>
-          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-            Connected
-          </span>
-        </div>
-        <div class="flex items-center justify-between">
-          <span class="text-sm text-gray-600">API Status</span>
-          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-            Running
-          </span>
-        </div>
-        <div class="flex items-center justify-between">
-          <span class="text-sm text-gray-600">Last Backup</span>
-          <span class="text-sm text-gray-900">Never</span>
-        </div>
+  <!-- All Classes (Admin) -->
+  <div class="card p-6 mb-8">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+        <h3 class="text-lg font-semibold text-gray-900">All Classes</h3>
+        {#if classes.length > 0}
+          <Button variant="secondary" size="sm" on:click={() => goto('/classes')}>
+            View All Classes
+          </Button>
+        {/if}
       </div>
-    </div>
-
-    <!-- All Classes -->
-    <div class="card p-6">
-      <h3 class="text-lg font-semibold text-gray-900 mb-4">All Classes</h3>
       {#if classes.length > 0}
-        <div class="space-y-3">
-          {#each classes.slice(0, 5) as classItem}
-            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-              <div>
-                <p class="text-sm font-medium text-gray-900">{classItem.name}</p>
-                <p class="text-xs text-gray-500">
-                  Teacher: {classItem.teacher?.firstName} {classItem.teacher?.lastName} • 
-                  Students: {classItem._count?.students || 0}
-                </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {#each classes.slice(0, 6) as classItem}
+            <div class="block w-full overflow-hidden rounded-xl border border-gray-200 bg-white hover:border-primary-300 hover:shadow-md transition-all">
+              <div class="h-24 bg-gradient-to-br from-primary-100 to-primary-50 flex items-center justify-center">
+                <svg class="w-10 h-10 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
               </div>
-              <Button variant="primary" size="sm" on:click={() => goto(`/classes/${classItem.id}`)}>
-                View
-              </Button>
+              <div class="p-4">
+                <p class="font-semibold text-gray-900 truncate w-full">{classItem.name || 'Unnamed Class'}</p>
+                <div class="flex items-center justify-between mt-2 text-sm text-gray-500 mb-3">
+                  <span>{classItem.teacher?.firstName} {classItem.teacher?.lastName}</span>
+                  <span class="font-medium">{classItem._count?.students || 0} students</span>
+                </div>
+                <div class="flex gap-2">
+                  <button
+                    type="button"
+                    class="flex-1 px-3 py-2 text-sm font-medium text-primary-600 bg-primary-50 rounded-lg hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                    on:click={() => goto(`/classes/${classItem.id}`)}
+                  >
+                    View
+                  </button>
+                  <button
+                    type="button"
+                    class="flex-1 px-3 py-2 text-sm font-medium text-purple-600 bg-purple-50 rounded-lg hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+                    on:click={() => goto(`/classes/${classItem.id}/chat-statistics`)}
+                  >
+                    Analysis
+                  </button>
+                </div>
+              </div>
             </div>
           {/each}
-          {#if classes.length > 5}
-            <div class="text-center">
-              <Button variant="secondary" size="sm" on:click={() => goto('/classes')}>
-                View All Classes
-              </Button>
-            </div>
-          {/if}
         </div>
       {:else}
         <div class="text-center py-8">
@@ -961,47 +1004,40 @@
       {/if}
     </div>
 
-    <!-- Recent Activity -->
-    <div class="card p-6">
-      <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
-      <div class="space-y-4">
-        <div class="flex items-center text-sm text-gray-500">
-          <div class="w-2 h-2 bg-gray-300 rounded-full mr-3"></div>
-          No recent activity
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- Quick Actions -->
   <div class="mt-8">
     <div class="card p-6">
       <h3 class="text-lg font-semibold text-gray-900 mb-4">Administrative Actions</h3>
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 md:grid-cols-3 gap-4">
         <Button variant="primary" size="md" fullWidth on:click={() => goto('/admin/users')}>
           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
           </svg>
           Manage Users
         </Button>
-        <Button variant="secondary" size="md" fullWidth>
+        <Button variant="secondary" size="md" fullWidth on:click={() => goto('/analytics')}>
           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
           </svg>
           View Analytics
         </Button>
-        <Button variant="secondary" size="md" fullWidth>
+        <Button variant="secondary" size="md" fullWidth on:click={() => goto('/admin/backup')}>
           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
           </svg>
           Backup System
         </Button>
-        <Button variant="secondary" size="md" fullWidth>
+        <Button variant="secondary" size="md" fullWidth on:click={() => goto('/admin/classes')}>
           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
           </svg>
-          System Settings
+          Manage Classes
+        </Button>
+        <Button variant="secondary" size="md" fullWidth on:click={() => goto('/admin/logs')}>
+          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          System Logger
         </Button>
       </div>
     </div>
