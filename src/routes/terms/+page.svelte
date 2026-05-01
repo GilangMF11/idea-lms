@@ -1,7 +1,5 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
-  import { page } from '$app/stores';
   import Button from '$lib/components/Button.svelte';
 
   // Track scroll position for progress indicator
@@ -39,7 +37,7 @@
   }
 
   function handleBack() {
-    goto(-1);
+    history.back();
   }
 </script>
 
@@ -75,7 +73,7 @@
     <article class="prose prose-blue max-w-none">
       <!-- Last Updated -->
       <p class="text-sm text-gray-500 mb-8">
-        Last Updated: <time datetime="2025-03-31">March 31, 2025</time>
+        Last Updated: <time datetime="2026-04-23">April 23, 2026</time>
       </p>
 
       <!-- Introduction -->
@@ -170,7 +168,7 @@
       <section id="privacy" class="mb-8 scroll-mt-20">
         <h2 class="text-2xl font-bold text-gray-900 mb-4">6. Privacy</h2>
         <p class="text-gray-700 mb-4">
-          Your privacy is important to us. Please review our Privacy Policy, which also governs your use of IDEA LMS, to understand our practices regarding your personal data.
+          Your privacy is important to us. Please review our <a href="/privacy" class="text-blue-600 hover:underline">Privacy Policy</a>, which also governs your use of IDEA LMS, to understand our practices regarding your personal data.
         </p>
       </section>
 

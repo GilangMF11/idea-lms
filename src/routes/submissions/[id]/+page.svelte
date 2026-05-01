@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import { authStore } from '$lib/stores/auth.js';
   import Button from '$lib/components/Button.svelte';
+  import { sanitizeHtml } from '$lib/sanitize.js';
 
   let exercise: any = null;
   let loading = true;
@@ -100,11 +101,11 @@
         initExerciseTimer(exercise.timerDuration ?? 0);
       } else {
         const errorData = await response.json();
-        error = errorData.error || 'Failed to load exercise';
+        error = errorData.error || 'Failed to load exit ticket';
       }
     } catch (err) {
-      console.error('Error loading exercise:', err);
-      error = 'Error loading exercise';
+      console.error('Error loading exit ticket:', err);
+      error = 'Error loading exit ticket';
     } finally {
       loading = false;
     }
@@ -177,11 +178,11 @@
         await loadSubmissions();
       } else {
         const errorData = await response.json();
-        error = errorData.error || 'Failed to submit exercise';
+        error = errorData.error || 'Failed to submit exit ticket';
       }
     } catch (err) {
-      console.error('Error submitting exercise:', err);
-      error = 'Error submitting exercise';
+      console.error('Error submitting exit ticket:', err);
+      error = 'Error submitting exit ticket';
     } finally {
       submitting = false;
       timerAutoSubmitting = false;
@@ -586,7 +587,7 @@
           <div class="flex items-center min-w-0 flex-1">
             <div class="mr-2 sm:mr-4 flex-shrink-0">
               <Button variant="secondary" size="sm" on:click={goBack}>
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-4 h-4 mr-0 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                 </svg>
                 <span class="hidden sm:inline">Back</span>
@@ -645,7 +646,7 @@
               {/if}
             </div>
             <div class="prose prose-sm max-w-none text-gray-700 leading-relaxed">
-              {@html exercise.readingText.content.substring(0, 500)}
+              {@html sanitizeHtml(exercise.readingText.content.substring(0, 500))}
               {#if exercise.readingText.content.length > 500}
                 <span class="text-gray-500">...</span>
               {/if}
@@ -682,7 +683,7 @@
             {/if}
           </div>
           <div class="text-sm text-gray-700 leading-relaxed space-y-2">
-            {@html exercise.content}
+            {@html sanitizeHtml(exercise.content)}
           </div>
           {#if timerDurationSeconds > 0 && $authStore.user?.role === 'STUDENT'}
             <div class="flex items-center justify-between text-sm text-gray-700">
@@ -730,10 +731,10 @@
       </div>
     {/if}
 
-    <!-- Exercise Content -->
+    <!-- Exit Ticket Content -->
     {#if exercise && !loading && !error}
       <div class="card overflow-hidden">
-        <!-- Exercise Info -->
+        <!-- Exit Ticket Info -->
         <div class="bg-gray-50 px-6 py-4 border-b border-gray-200">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
@@ -790,7 +791,7 @@
         </div>
 
         <div class="p-6">
-          <!-- Exercise Content -->
+          <!-- Exit Ticket Content -->
           <div class="mb-8">
             <div class="flex items-center space-x-3 mb-6">
               <div class="w-8 h-8 bg-primary-100 rounded-lg flex items-center justify-center">

@@ -5,6 +5,11 @@ import { config } from './config.js';
 // import type { User } from '@prisma/client';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-here';
+
+// SECURITY: Fail fast if JWT_SECRET is not set in production
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
+  throw new Error('FATAL: JWT_SECRET environment variable must be set in production');
+}
 export const DEFAULT_SESSION_MAX_AGE_SECONDS = Number(process.env.SESSION_MAX_AGE_SECONDS || 60 * 60 * 12); // 12h
 export const REMEMBER_ME_MAX_AGE_SECONDS = Number(process.env.REMEMBER_ME_MAX_AGE_SECONDS || 60 * 60 * 24 * 7); // 7d
 
@@ -81,13 +86,17 @@ export async function authenticateUser(email: string, password: string): Promise
     where: { email },
   });
 
-  if (!user || !user.isActive) {
-    return null;
+  if (!user) {
+    throw new Error('User account not found.');
+  }
+
+  if (!user.isActive) {
+    throw new Error('Your account is currently inactive.');
   }
 
   // If user has no password (OAuth user), they can't login with email/password
   if (!user.password) {
-    return null;
+    throw new Error('Please log in using your Google account.');
   }
 
   // Enforce email verification
@@ -97,7 +106,7 @@ export async function authenticateUser(email: string, password: string): Promise
 
   const isValidPassword = await verifyPassword(password, user.password);
   if (!isValidPassword) {
-    return null;
+    throw new Error('Incorrect password. Please try again.');
   }
 
   return {

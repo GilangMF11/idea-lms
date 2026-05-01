@@ -1,25 +1,16 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { prisma } from '$lib/database.js';
-import { verifyToken } from '$lib/auth.js';
+import { getAuthUser, apiError, requireTeacher, requireAdmin } from '$lib/api-utils.js';
 
 export const GET: RequestHandler = async ({ request, params }: { request: any; params: any }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
-    if (!user) {
-      return json({ error: 'Invalid token' }, { status: 401 });
-    }
+    const user = getAuthUser(request);
 
     const exerciseId = params.id;
 
     if (!exerciseId) {
-      return json({ error: 'Exercise ID is required' }, { status: 400 });
+      return json({ error: 'Exit ticket ID is required' }, { status: 400 });
     }
 
     const exercise = await prisma.exercise.findUnique({
@@ -46,7 +37,7 @@ export const GET: RequestHandler = async ({ request, params }: { request: any; p
     });
 
     if (!exercise) {
-      return json({ error: 'Exercise not found' }, { status: 404 });
+      return json({ error: 'Exit ticket not found' }, { status: 404 });
     }
 
     // Check access permissions
@@ -71,7 +62,6 @@ export const GET: RequestHandler = async ({ request, params }: { request: any; p
 
     return json({ exercise });
   } catch (error) {
-    console.error('Get exercise error:', error);
-    return json({ error: 'Internal server error' }, { status: 500 });
+    return apiError(error);
   }
 };

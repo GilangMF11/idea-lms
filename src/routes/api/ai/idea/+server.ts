@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { prisma } from '$lib/database.js';
-import { verifyToken } from '$lib/auth.js';
+import { getAuthUser, apiError, requireTeacher, requireAdmin } from '$lib/api-utils.js';
 import { createHistory } from '$lib/history.js';
 import {
   checkAIRequestLimit,
@@ -13,16 +13,7 @@ import {
 
 export const POST: RequestHandler = async ({ request }: { request: any }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
-    if (!user) {
-      return json({ error: 'Invalid token' }, { status: 401 });
-    }
+    const user = getAuthUser(request);
 
     const body = await request.json();
     const { question, classId, readingTextId, annotationId } = body ?? {};

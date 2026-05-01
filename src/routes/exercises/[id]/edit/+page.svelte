@@ -3,6 +3,7 @@
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { authStore } from '$lib/stores/auth.js';
+  import { apiFetchJson } from '$lib/api.js';
   import Button from '$lib/components/Button.svelte';
 
   let exercise: any = null;
@@ -23,55 +24,29 @@
 
   let readingTexts: any[] = [];
 
-  onMount(async () => {
-    authStore.init();
-    
-    // Redirect if not authenticated
-    if (!$authStore.isAuthenticated) {
-      goto('/login');
-      return;
-    }
-
-    // Check if user can edit exercises
-    if (!['TEACHER', 'ADMIN'].includes($authStore.user?.role || '')) {
-      goto('/login');
-      return;
-    }
-
-    await Promise.all([loadExercise(), loadReadingTexts()]);
+  onMount(() => {
+    goto('/teacher/exit-tickets', { replaceState: true });
   });
 
   async function loadExercise() {
     try {
       loading = true;
-      const response = await fetch(`/api/submissions/${$page.params.id}`, {
-        headers: {
-          'Authorization': `Bearer ${$authStore.token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        exercise = data.exercise;
-        
-        // Populate form data
-        formData = {
-          title: exercise.title || '',
-          description: exercise.description || '',
-          content: exercise.content || '',
-          dueDate: exercise.dueDate ? new Date(exercise.dueDate).toISOString().split('T')[0] : '',
-          readingTextId: exercise.readingTextId || '',
-          minWords: exercise.minWords != null ? String(exercise.minWords) : '',
-          maxWords: exercise.maxWords != null ? String(exercise.maxWords) : ''
-        };
-      } else {
-        const errorData = await response.json();
-        error = errorData.error || 'Failed to load exercise';
-      }
-    } catch (err) {
-      console.error('Error loading exercise:', err);
-      error = 'Error loading exercise';
+      const data = await apiFetchJson(`/api/exercises/${$page.params.id}`);
+      exercise = data.exercise;
+      
+      // Populate form data
+      formData = {
+        title: exercise.title || '',
+        description: exercise.description || '',
+        content: exercise.content || '',
+        dueDate: exercise.dueDate ? new Date(exercise.dueDate).toISOString().split('T')[0] : '',
+        readingTextId: exercise.readingTextId || '',
+        minWords: exercise.minWords != null ? String(exercise.minWords) : '',
+        maxWords: exercise.maxWords != null ? String(exercise.maxWords) : ''
+      };
+    } catch (err: any) {
+      console.error('Error loading exit ticket:', err);
+      error = err.message || 'Error loading exit ticket';
     } finally {
       loading = false;
     }
@@ -79,17 +54,8 @@
 
   async function loadReadingTexts() {
     try {
-      const response = await fetch(`/api/reading-texts?classId=${exercise?.classId}`, {
-        headers: {
-          'Authorization': `Bearer ${$authStore.token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        readingTexts = data.readingTexts || [];
-      }
+      const data = await apiFetchJson(`/api/reading-texts?classId=${exercise?.classId}`);
+      readingTexts = data.readingTexts || [];
     } catch (err) {
       console.error('Error loading reading texts:', err);
     }
@@ -105,12 +71,8 @@
       saving = true;
       error = '';
 
-      const response = await fetch('/api/exercises', {
+      const data = await apiFetchJson('/api/exercises', {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${$authStore.token}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({
           id: $page.params.id,
           title: formData.title.trim(),
@@ -123,19 +85,13 @@
         })
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        exercise = data.exercise;
-        
-        // Navigate to view page
-        goto(`/submissions/${$page.params.id}`);
-      } else {
-        const errorData = await response.json();
-        error = errorData.error || 'Failed to update exercise';
-      }
-    } catch (err) {
-      console.error('Error updating exercise:', err);
-      error = 'Error updating exercise';
+      exercise = data.exercise;
+      
+      // Navigate to view page
+      goto(`/submissions/${$page.params.id}`);
+    } catch (err: any) {
+      console.error('Error updating exit ticket:', err);
+      error = err.message || 'Error updating exit ticket';
     } finally {
       saving = false;
     }
@@ -151,7 +107,7 @@
 </script>
 
 <svelte:head>
-  <title>Edit {exercise?.title || 'Exercise'} - IDEA</title>
+  <title>Edit {exercise?.title || 'Exit Ticket'} - IDEA</title>
 </svelte:head>
 
 <div class="min-h-screen bg-gray-50">
@@ -170,7 +126,7 @@
             Back to Class Management
           </button>
           <h1 class="text-3xl font-bold text-gray-900">
-            Edit Exercise
+            Edit Exit Ticket
           </h1>
           <p class="text-gray-600 mt-2">
             Update exercise details and content
@@ -183,7 +139,7 @@
     {#if loading}
       <div class="flex justify-center items-center py-12">
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-        <span class="ml-3 text-gray-600">Loading exercise...</span>
+        <span class="ml-3 text-gray-600">Loading exit ticket...</span>
       </div>
     {/if}
 
@@ -241,21 +197,21 @@
                     bind:value={formData.description}
                     rows="3"
                     class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="Enter exercise description"
+                    placeholder="Enter exit ticket description"
                   ></textarea>
                 </div>
 
                 <!-- Content -->
                 <div>
                   <label for="content" class="block text-sm font-medium text-gray-700 mb-2">
-                    Exercise Content
+                    Exit Ticket Content
                   </label>
                   <textarea
                     id="content"
                     bind:value={formData.content}
                     rows="8"
                     class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="Enter exercise content and instructions"
+                    placeholder="Enter exit ticket content and instructions"
                   ></textarea>
                 </div>
               </div>

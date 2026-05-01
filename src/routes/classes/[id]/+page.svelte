@@ -236,7 +236,7 @@
     const targetGroup = groups.find((g: any) => g.id === groupId);
     if (targetGroup?.lessonId) {
       const lessonGroups = groups.filter((g: any) => g.lessonId === targetGroup.lessonId);
-      const alreadyJoinedInLesson = lessonGroups.some((g: any) => isUserInGroup(g.id));
+      const alreadyJoinedInLesson = lessonGroups.some((g: any) => joinedGroupIds.has(g.id));
       if (alreadyJoinedInLesson) {
         alert('You have already joined a group in this lesson.');
         return;
@@ -271,9 +271,6 @@
     }
   }
 
-  function isUserInGroup(groupId: string): boolean {
-    return joinedGroupIds.has(groupId);
-  }
 
   function getScheduleStatus(text: any): 'scheduled' | 'open' | 'closed' | 'active' {
     if (!text.openAt && !text.closeAt) return 'active';
@@ -331,7 +328,7 @@
           <div class="flex items-center mb-3 sm:mb-0">
             <div class="mr-2 sm:mr-4 flex-shrink-0">
               <Button variant="secondary" size="sm" on:click={goBack}>
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-4 h-4 mr-0 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                 </svg>
                 <span class="hidden sm:inline">Back</span>
@@ -450,12 +447,14 @@
       <div class="mb-8">
         <div class="border-b border-gray-200">
           <nav class="-mb-px flex space-x-3 sm:space-x-8 overflow-x-auto scrollbar-hide">
+            <!-- 1. Overview -->
             <button
               class="py-2 px-2 sm:px-1 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap flex-shrink-0 {activeTab === 'overview' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
               on:click={() => activeTab = 'overview'}
             >
               Overview
             </button>
+            <!-- 2. Students (TEACHER/ADMIN ONLY) -->
             {#if $authStore.user?.role === 'TEACHER' || $authStore.user?.role === 'ADMIN'}
             <button
               class="py-2 px-2 sm:px-1 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap flex-shrink-0 {activeTab === 'students' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
@@ -466,22 +465,16 @@
               <span class="text-primary-600 font-semibold">({students.length})</span>
             </button>
             {/if}
+            <!-- 3. Lessons (Formerly Materials) -->
             <button
-              class="py-2 px-2 sm:px-1 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap flex-shrink-0 {activeTab === 'assignments' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
-              on:click={() => activeTab = 'assignments'}
+              class="py-2 px-2 sm:px-1 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap flex-shrink-0 {activeTab === 'lessons' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
+              on:click={() => activeTab = 'lessons'}
             >
-              <span class="inline sm:hidden">Tickets </span>
-              <span class="hidden sm:inline">Exit Tickets </span>
-              <span class="text-primary-600 font-semibold">({exercises.length})</span>
-            </button>
-            <button
-              class="py-2 px-2 sm:px-1 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap flex-shrink-0 {activeTab === 'materials' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
-              on:click={() => activeTab = 'materials'}
-            >
-              <span class="inline sm:hidden">Read </span>
-              <span class="hidden sm:inline">Materials </span>
+              <span class="inline sm:hidden">Lsn </span>
+              <span class="hidden sm:inline">Lessons </span>
               <span class="text-primary-600 font-semibold">({readingTexts.length})</span>
             </button>
+            <!-- 4. Groups -->
             <button
               class="py-2 px-2 sm:px-1 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap flex-shrink-0 {activeTab === 'groups' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
               on:click={() => activeTab = 'groups'}
@@ -489,6 +482,15 @@
               <span class="inline sm:hidden">Grp</span>
               <span class="hidden sm:inline">Groups</span>
               <span class="text-primary-600 font-semibold">({groups.length})</span>
+            </button>
+            <!-- 5. Exit Tickets -->
+            <button
+              class="py-2 px-2 sm:px-1 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap flex-shrink-0 {activeTab === 'assignments' ? 'border-primary-500 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
+              on:click={() => activeTab = 'assignments'}
+            >
+              <span class="inline sm:hidden">Tickets </span>
+              <span class="hidden sm:inline">Exit Tickets </span>
+              <span class="text-primary-600 font-semibold">({exercises.length})</span>
             </button>
           </nav>
         </div>
@@ -501,8 +503,8 @@
         {@render studentsTab()}
       {:else if activeTab === 'assignments'}
         {@render assignmentsTab()}
-      {:else if activeTab === 'materials'}
-        {@render materialsTab()}
+      {:else if activeTab === 'lessons'}
+        {@render lessonsTab()}
       {:else if activeTab === 'groups'}
         {@render groupsTab()}
       {/if}
@@ -730,12 +732,11 @@
     </div>
 
     {#if exercises.length > 0}
-      <div class="space-y-4">
-        {#each exercises as exercise}
+      {#snippet exerciseCard(exercise: any)}
           {#if $authStore.user?.role === 'STUDENT'}
             <!-- Student view: clickable card -->
             <div 
-              class="border border-gray-200 rounded-lg p-4 cursor-pointer hover:border-primary-300 hover:shadow-md transition-all"
+              class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm cursor-pointer hover:shadow-md hover:-translate-y-1 hover:border-primary-300 transition-all duration-200"
               on:click={() => handleExerciseClick(exercise)}
               role="button"
               tabindex="0"
@@ -763,7 +764,7 @@
             </div>
           {:else}
             <!-- Teacher/Admin view: card with buttons -->
-            <div class="border border-gray-200 rounded-lg p-4">
+            <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-1 hover:border-primary-200 transition-all duration-200">
               <div class="flex items-center justify-between">
                 <div class="flex-1">
                   <h4 class="text-sm font-medium text-gray-900">{exercise.title}</h4>
@@ -788,7 +789,40 @@
               </div>
             </div>
           {/if}
+      {/snippet}
+
+      <div class="space-y-8">
+        {#each lessons as lesson}
+          {@const lessonExercises = exercises.filter((e: any) => e.lessonId === lesson.id)}
+          {#if lessonExercises.length > 0}
+            <div>
+              <div class="flex items-center mb-4">
+                <h4 class="text-md font-semibold text-gray-800">{lesson.title}</h4>
+                <div class="ml-4 flex-grow border-t border-gray-200"></div>
+              </div>
+              <div class="space-y-4">
+                {#each lessonExercises as exercise}
+                  {@render exerciseCard(exercise)}
+                {/each}
+              </div>
+            </div>
+          {/if}
         {/each}
+
+        {#if exercises.some((e: any) => !e.lessonId)}
+          {@const unassignedExercises = exercises.filter((e: any) => !e.lessonId)}
+          <div>
+            <div class="flex items-center mb-4">
+              <h4 class="text-md font-semibold text-gray-800">Class-wide Exit Tickets</h4>
+              <div class="ml-4 flex-grow border-t border-gray-200"></div>
+            </div>
+            <div class="space-y-4">
+              {#each unassignedExercises as exercise}
+                {@render exerciseCard(exercise)}
+              {/each}
+            </div>
+          </div>
+        {/if}
       </div>
     {:else}
       <div class="text-center py-12">
@@ -809,12 +843,12 @@
   </div>
 {/snippet}
 
-<!-- Materials Tab (grouped by Lessons) -->
-{#snippet materialsTab()}
+<!-- Lessons Tab (grouped by Lessons) -->
+{#snippet lessonsTab()}
   <div class="card p-6">
     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
       <div>
-        <h3 class="text-lg font-semibold text-gray-900">Materials & Lessons</h3>
+        <h3 class="text-lg font-semibold text-gray-900">Lessons</h3>
         <div class="text-sm text-gray-500">
           {lessons.length} lesson(s) &middot; {readingTexts.length} reading text(s) &middot; {exercises.length} exit ticket(s)
         </div>
@@ -861,10 +895,11 @@
 
             <!-- Lesson Content (expandable) -->
             {#if isExpanded}
+              {@const visibleGroups = $authStore.user?.role === 'STUDENT' ? lessonGroups.filter((g: any) => joinedGroupIds.has(g.id)) : lessonGroups}
               <div class="p-4 space-y-3">
                 <!-- Groups in this lesson -->
-                {#if lessonGroups.length > 0}
-                  {#each lessonGroups as group}
+                {#if visibleGroups.length > 0}
+                  {#each visibleGroups as group}
                     {@const groupTexts = readingTexts.filter((t: any) => t.groupId === group.id)}
                     <div class="border border-purple-200 rounded-lg overflow-hidden">
                       <div class="flex items-center justify-between p-3 bg-purple-50">
@@ -878,9 +913,9 @@
                           </div>
                         </div>
                         {#if $authStore.user?.role === 'STUDENT'}
-                          {#if isUserInGroup(group.id)}
+                          {#if joinedGroupIds.has(group.id)}
                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 ml-2">Joined</span>
-                          {:else if lessonGroups.some((g: any) => isUserInGroup(g.id))}
+                          {:else if lessonGroups.some((g: any) => joinedGroupIds.has(g.id))}
                             <span class="text-xs text-gray-400 ml-2">Already joined another group</span>
                           {:else}
                             <Button
@@ -895,7 +930,7 @@
                         {/if}
                       </div>
                       <!-- Group Reading Texts (for joined members or teacher) -->
-                      {#if groupTexts.length > 0 && ($authStore.user?.role !== 'STUDENT' || isUserInGroup(group.id))}
+                      {#if groupTexts.length > 0 && ($authStore.user?.role !== 'STUDENT' || joinedGroupIds.has(group.id))}
                         <div class="px-3 py-2 space-y-1 bg-white border-t border-purple-100">
                           {#each groupTexts as text}
                             {#if $authStore.user?.role === 'STUDENT'}
@@ -948,7 +983,7 @@
                               </div>
                             {/if}
                           {/each}
-                          <!-- Group Exercises (linked via readingText.groupId) -->
+                          <!-- Group Exit Tickets (linked via readingText.groupId) -->
                           {#each lessonExercises.filter((e: any) => groupTexts.some((t: any) => t.id === e.readingTextId)) as exercise}
                             {#if $authStore.user?.role === 'STUDENT'}
                               <div
@@ -983,7 +1018,7 @@
                           {/each}
                         </div>
                       {/if}
-                      {#if $authStore.user?.role === 'STUDENT' && !isUserInGroup(group.id) && (groupTexts.length > 0 || lessonExercises.filter((e: any) => groupTexts.some((t: any) => t.id === e.readingTextId)).length > 0)}
+                      {#if $authStore.user?.role === 'STUDENT' && !joinedGroupIds.has(group.id) && (groupTexts.length > 0 || lessonExercises.filter((e: any) => groupTexts.some((t: any) => t.id === e.readingTextId)).length > 0)}
                         <div class="px-3 py-2 bg-gray-50 border-t border-purple-100">
                           <p class="text-xs text-gray-400 text-center">Join this group to access {groupTexts.length} reading material{groupTexts.length > 1 ? 's' : ''}{groupTexts.length > 0 && lessonExercises.filter((e: any) => groupTexts.some((t: any) => t.id === e.readingTextId)).length > 0 ? ' & ' : ''}{lessonExercises.filter((e: any) => groupTexts.some((t: any) => t.id === e.readingTextId)).length} exit ticket{lessonExercises.filter((e: any) => groupTexts.some((t: any) => t.id === e.readingTextId)).length > 1 ? 's' : ''}</p>
                         </div>
@@ -1138,58 +1173,90 @@
     </div>
 
     {#if groups.length > 0}
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {#each groups as group}
-          <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all">
-            <div class="flex items-start justify-between mb-3">
-              <div>
-                <h4 class="text-base font-semibold text-gray-900">{group.name}</h4>
-                {#if group.description}
-                  <p class="text-sm text-gray-600 mt-1">{group.description}</p>
-                {/if}
-              </div>
-              {#if isUserInGroup(group.id)}
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                  Joined
-                </span>
+      {#snippet groupCard(group: any)}
+        <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-1 hover:border-primary-200 transition-all duration-200">
+          <div class="flex items-start justify-between mb-3">
+            <div>
+              <h4 class="text-base font-semibold text-gray-900">{group.name}</h4>
+              {#if group.description}
+                <p class="text-sm text-gray-600 mt-1">{group.description}</p>
               {/if}
             </div>
+            {#if joinedGroupIds.has(group.id)}
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                Joined
+              </span>
+            {/if}
+          </div>
 
-            <div class="flex items-center justify-between mt-4">
-              <div class="text-sm text-gray-500">
-                <span class="font-medium">{group._count?.members || 0}</span> members
-              </div>
+          <div class="flex items-center justify-between mt-4">
+            <div class="text-sm text-gray-500">
+              <span class="font-medium">{group._count?.members || 0}</span> members
+            </div>
 
-              {#if !isUserInGroup(group.id)}
-                {@const alreadyJoinedLesson = group.lessonId && groups.filter((g: any) => g.lessonId === group.lessonId).some((g: any) => isUserInGroup(g.id))}
-                {#if alreadyJoinedLesson}
-                  <span class="text-xs text-gray-400">Already joined another group in this lesson</span>
-                {:else}
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    disabled={joinGroupLoading}
-                    on:click={() => handleJoinGroup(group.id)}
-                  >
-                    {joinGroupLoading ? 'Joining...' : 'Join Group'}
-                  </Button>
-                {/if}
+            {#if !joinedGroupIds.has(group.id)}
+              {@const alreadyJoinedLesson = group.lessonId && groups.filter((g: any) => g.lessonId === group.lessonId).some((g: any) => joinedGroupIds.has(g.id))}
+              {#if alreadyJoinedLesson}
+                <span class="text-xs text-gray-400">Already joined another group in this lesson</span>
               {:else}
-                <div class="text-xs text-gray-500">
-                  You're a member of this group
-                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={joinGroupLoading}
+                  on:click={() => handleJoinGroup(group.id)}
+                >
+                  {joinGroupLoading ? 'Joining...' : 'Join Group'}
+                </Button>
               {/if}
-            </div>
-
-            {#if group._count?.readingTexts > 0}
-              <div class="mt-3 pt-3 border-t border-gray-100">
-                <p class="text-xs text-gray-500">
-                  <span class="font-medium">{group._count.readingTexts}</span> reading materials assigned
-                </p>
+            {:else}
+              <div class="text-xs text-gray-500">
+                You're a member of this group
               </div>
             {/if}
           </div>
+
+          {#if group._count?.readingTexts > 0}
+            <div class="mt-3 pt-3 border-t border-gray-100">
+              <p class="text-xs text-gray-500">
+                <span class="font-medium">{group._count.readingTexts}</span> reading materials assigned
+              </p>
+            </div>
+          {/if}
+        </div>
+      {/snippet}
+
+      <div class="space-y-8">
+        {#each lessons as lesson}
+          {@const lessonGroups = groups.filter((g: any) => g.lessonId === lesson.id)}
+          {#if lessonGroups.length > 0}
+            <div>
+              <div class="flex items-center mb-4">
+                <h4 class="text-md font-semibold text-gray-800">{lesson.title}</h4>
+                <div class="ml-4 flex-grow border-t border-gray-200"></div>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {#each lessonGroups as group}
+                  {@render groupCard(group)}
+                {/each}
+              </div>
+            </div>
+          {/if}
         {/each}
+
+        {#if groups.some((g: any) => !g.lessonId)}
+          {@const unassignedGroups = groups.filter((g: any) => !g.lessonId)}
+          <div>
+            <div class="flex items-center mb-4">
+              <h4 class="text-md font-semibold text-gray-800">Class-wide Groups</h4>
+              <div class="ml-4 flex-grow border-t border-gray-200"></div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {#each unassignedGroups as group}
+                {@render groupCard(group)}
+              {/each}
+            </div>
+          </div>
+        {/if}
       </div>
     {:else}
       <div class="text-center py-12">

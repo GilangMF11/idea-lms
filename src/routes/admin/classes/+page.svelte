@@ -12,6 +12,14 @@
   let error = '';
   let success = '';
 
+  // Search & Pagination State
+  let searchQuery = '';
+  let searchInput = ''; // for debouncing
+  let searchTimeout: any;
+  let currentPage = 1;
+  let itemsPerPage = 10;
+  let paginationInfo = { total: 0, page: 1, limit: 10, totalPages: 1 };
+
   // Modal State
   let showCreateModal = false;
   let showEditModal = false;
@@ -40,21 +48,43 @@
     await fetchClasses();
   });
 
-  async function fetchClasses() {
+  async function fetchClasses(page = 1) {
     loading = true;
     error = '';
     try {
-      // Re-use existing GET /api/classes which correctly handles role === 'ADMIN'
-      const res = await fetch('/api/classes', {
+      currentPage = page;
+      const params = new URLSearchParams({
+        page: currentPage.toString(),
+        limit: itemsPerPage.toString(),
+        search: searchQuery
+      });
+      const res = await fetch(`/api/classes?${params.toString()}`, {
         headers: { 'Authorization': `Bearer ${$authStore.token}` }
       });
       if (!res.ok) throw new Error('Failed to fetch master classes list');
       const data = await res.json();
       classes = data.classes || [];
+      if (data.pagination) {
+        paginationInfo = data.pagination;
+      }
     } catch (err: any) {
       error = err.message;
     } finally {
       loading = false;
+    }
+  }
+
+  function handleSearchInput() {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+      searchQuery = searchInput;
+      fetchClasses(1);
+    }, 500);
+  }
+
+  function changePage(newPage: number) {
+    if (newPage >= 1 && newPage <= paginationInfo.totalPages) {
+      fetchClasses(newPage);
     }
   }
 
@@ -318,12 +348,24 @@
     {/if}
 
     <div class="bg-white shadow-sm ring-1 ring-gray-900/5 sm:rounded-xl md:col-span-2 mt-4">
-      <div class="px-4 py-5 sm:px-6 flex justify-between items-center border-b border-gray-200">
+      <div class="px-4 py-5 sm:px-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-200">
         <div>
           <h3 class="text-lg leading-6 font-semibold text-gray-900">Total Registered Classes</h3>
           <p class="mt-1 max-w-2xl text-sm text-gray-500">
             Select "Plot Students" on any class to adjust their bulk student rosters.
           </p>
+        </div>
+        
+        <div class="w-full sm:w-72">
+          <label for="search" class="sr-only">Search classes</label>
+          <div class="relative rounded-md shadow-sm">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <input type="text" id="search" bind:value={searchInput} on:input={handleSearchInput} class="focus:ring-primary-500 focus:border-primary-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md border py-2" placeholder="Search by name, code, or teacher...">
+          </div>
         </div>
       </div>
       
@@ -406,6 +448,60 @@
               {/each}
             </tbody>
           </table>
+
+          <!-- Pagination -->
+          <div class="border-t border-gray-200 bg-white px-4 py-3 sm:px-6 flex items-center justify-between">
+            <div class="flex-1 flex justify-between sm:hidden">
+              <button on:click={() => changePage(currentPage - 1)} disabled={currentPage === 1} class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                Previous
+              </button>
+              <button on:click={() => changePage(currentPage + 1)} disabled={currentPage === paginationInfo.totalPages} class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                Next
+              </button>
+            </div>
+            <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+              <div>
+                <p class="text-sm text-gray-700">
+                  Showing
+                  <span class="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span>
+                  to
+                  <span class="font-medium">{Math.min(currentPage * itemsPerPage, paginationInfo.total)}</span>
+                  of
+                  <span class="font-medium">{paginationInfo.total}</span>
+                  results
+                </p>
+              </div>
+              <div>
+                <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                  <button on:click={() => changePage(currentPage - 1)} disabled={currentPage === 1} class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span class="sr-only">Previous</span>
+                    <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                      <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
+                    </svg>
+                  </button>
+                  
+                  {#each Array.from({ length: paginationInfo.totalPages }, (_, i) => i + 1) as page}
+                    {#if page === 1 || page === paginationInfo.totalPages || (page >= currentPage - 1 && page <= currentPage + 1)}
+                      <button on:click={() => changePage(page)} class={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${currentPage === page ? 'z-10 bg-primary-50 border-primary-500 text-primary-600' : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'}`}>
+                        {page}
+                      </button>
+                    {:else if page === currentPage - 2 || page === currentPage + 2}
+                      <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
+                        ...
+                      </span>
+                    {/if}
+                  {/each}
+
+                  <button on:click={() => changePage(currentPage + 1)} disabled={currentPage === paginationInfo.totalPages} class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span class="sr-only">Next</span>
+                    <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                      <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                    </svg>
+                  </button>
+                </nav>
+              </div>
+            </div>
+          </div>
         {/if}
       </div>
     </div>

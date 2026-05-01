@@ -108,7 +108,6 @@ export {
   formatDateTime, 
   parsePaginationParams, 
   calculatePagination, 
-  sanitizeHtml, 
   truncateText, 
   extractTextFromHtml, 
   generateSlug, 

@@ -5,6 +5,7 @@
   import { authStore } from '$lib/stores/auth.js';
   import Button from '$lib/components/Button.svelte';
   import Alert from '$lib/components/Alert.svelte';
+  import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 
   let classData: any = null;
   let students: any[] = [];
@@ -62,6 +63,16 @@
   let createStudentLoading = false;
   let createStudentError = '';
   let activeTab = 'overview';
+
+  // Confirm Dialog State
+  let showConfirmDialog = false;
+  let isConfirmLoading = false;
+  let confirmDialogProps = {
+    title: 'Confirm Delete',
+    message: 'Are you sure you want to delete this?',
+    confirmText: 'Delete',
+    onConfirm: async () => {},
+  };
 
   onMount(() => {
     if (!$authStore.isAuthenticated || !['TEACHER', 'ADMIN'].includes($authStore.user?.role || '')) {
@@ -155,32 +166,37 @@
 
   async function deleteClass() {
     if (!classData) return;
-    if (!confirm(`Are you sure you want to delete class "${classData.name}"? This action cannot be undone.`)) {
-      return;
-    }
 
-    try {
-      loading = true;
-      const response = await fetch(`/api/classes/${$page.params.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${$authStore.token}`,
-          'Content-Type': 'application/json'
+    confirmDialogProps = {
+      title: 'Delete Class',
+      message: `Are you sure you want to delete class "${classData.name}"? This action cannot be undone.`,
+      confirmText: 'Permanently Delete',
+      onConfirm: async () => {
+        try {
+          isConfirmLoading = true;
+          const response = await fetch(`/api/classes/${$page.params.id}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${$authStore.token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (response.ok) {
+            goto('/my-classes');
+          } else {
+            const errorData = await response.json();
+            alert(`Failed to delete class: ${errorData.error}`);
+            isConfirmLoading = false;
+          }
+        } catch (err: any) {
+          console.error('Error deleting class:', err);
+          alert(`Failed to delete class: ${err.message}`);
+          isConfirmLoading = false;
         }
-      });
-
-      if (response.ok) {
-        goto('/my-classes');
-      } else {
-        const errorData = await response.json();
-        alert(`Failed to delete class: ${errorData.error}`);
-        loading = false;
       }
-    } catch (err) {
-      console.error('Error deleting class:', err);
-      alert('Failed to delete class due to an unexpected error.');
-      loading = false;
-    }
+    };
+    showConfirmDialog = true;
   }
 
   async function loadAllStudents() {
@@ -506,30 +522,38 @@
     }
   }
 
-  async function handleDeleteLesson(lessonId: string) {
-    if (!confirm('Are you sure you want to delete this lesson? All reading texts and exercises in this lesson will also be deleted.')) {
-      return;
-    }
+  async function deleteLesson(lessonId: string) {
+    confirmDialogProps = {
+      title: 'Delete Lesson',
+      message: 'Are you sure you want to delete this lesson? All reading texts and exercises in this lesson will also be deleted.',
+      confirmText: 'Delete Lesson',
+      onConfirm: async () => {
+        try {
+          isConfirmLoading = true;
+          const response = await fetch(`/api/lessons?id=${lessonId}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${$authStore.token}`,
+              'Content-Type': 'application/json'
+            }
+          });
 
-    try {
-      const response = await fetch(`/api/lessons?id=${lessonId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${$authStore.token}`,
-          'Content-Type': 'application/json'
+          if (response.ok) {
+            await loadLessons();
+            await loadClassData();
+            showConfirmDialog = false;
+          } else {
+            alert('Failed to delete lesson');
+          }
+        } catch (err) {
+          console.error('Delete lesson error:', err);
+          alert('Failed to delete lesson');
+        } finally {
+          isConfirmLoading = false;
         }
-      });
-
-      if (response.ok) {
-        await loadLessons();
-        await loadClassData();
-      } else {
-        alert('Failed to delete lesson');
       }
-    } catch (err) {
-      console.error('Delete lesson error:', err);
-      alert('Failed to delete lesson');
-    }
+    };
+    showConfirmDialog = true;
   }
 
   function openCreateGroupModal(lessonId?: string) {
@@ -720,29 +744,37 @@
     }
   }
 
-  async function handleDeleteGroup(groupId: string) {
-    if (!confirm('Are you sure you want to delete this group?')) {
-      return;
-    }
+  async function deleteGroup(groupId: string) {
+    confirmDialogProps = {
+      title: 'Delete Group',
+      message: 'Are you sure you want to delete this group?',
+      confirmText: 'Delete Group',
+      onConfirm: async () => {
+        try {
+          isConfirmLoading = true;
+          const response = await fetch(`/api/groups/${groupId}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${$authStore.token}`,
+              'Content-Type': 'application/json'
+            }
+          });
 
-    try {
-      const response = await fetch(`/api/groups/${groupId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${$authStore.token}`,
-          'Content-Type': 'application/json'
+          if (response.ok) {
+            await loadGroups();
+            showConfirmDialog = false;
+          } else {
+            alert('Failed to delete group');
+          }
+        } catch (err) {
+          console.error('Delete group error:', err);
+          alert('Failed to delete group');
+        } finally {
+          isConfirmLoading = false;
         }
-      });
-
-      if (response.ok) {
-        await loadGroups();
-      } else {
-        alert('Failed to delete group');
       }
-    } catch (err) {
-      console.error('Delete group error:', err);
-      alert('Failed to delete group');
-    }
+    };
+    showConfirmDialog = true;
   }
 
   function viewReadingText(textId: string) {
@@ -869,6 +901,16 @@
   <title>Manage Class - {classData?.name || 'Loading...'} - IDEA</title>
 </svelte:head>
 
+<ConfirmDialog 
+  show={showConfirmDialog}
+  title={confirmDialogProps.title}
+  message={confirmDialogProps.message}
+  confirmText={confirmDialogProps.confirmText}
+  loading={isConfirmLoading}
+  on:confirm={confirmDialogProps.onConfirm}
+  on:cancel={() => showConfirmDialog = false}
+/>
+
 {#if loading}
   <div class="min-h-screen flex items-center justify-center bg-gray-50">
     <div class="text-center">
@@ -895,7 +937,7 @@
             <div class="flex items-center min-w-0 flex-1">
               <div class="mr-2 sm:mr-4 flex-shrink-0">
               <Button variant="secondary" size="sm" on:click={goBack}>
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-4 h-4 mr-0 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                 </svg>
                   <span class="hidden sm:inline">Back</span>
@@ -1012,6 +1054,13 @@
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                 </svg>
                 Add Reading Text
+              </Button>
+              <Button variant="secondary" size="sm" fullWidth on:click={() => goto('/dashboard')}>
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z" />
+                </svg>
+                Back to Dashboard
               </Button>
             </div>
           </div>
@@ -1175,7 +1224,7 @@
                             >+ Group</button>
                             <button
                               class="text-red-600 hover:text-red-900 text-xs"
-                              on:click={() => handleDeleteLesson(lesson.id)}
+                              on:click={() => deleteLesson(lesson.id)}
                             >Delete</button>
                           </div>
                         </div>
@@ -1186,7 +1235,7 @@
                         </div>
                       </div>
 
-                      <!-- Lesson Contents: Group -> Reading Text -> Exercises -->
+                      <!-- Lesson Contents: Group -> Reading Text -> Exit Tickets -->
                       <div class="p-4">
                         {#if groups.filter((g: any) => g.lessonId === lesson.id).length > 0 || readingTexts.filter((t: any) => t.lessonId === lesson.id && !t.groupId).length > 0 || exercises.filter((e: any) => e.lessonId === lesson.id).length > 0}
                           <div class="space-y-3">
@@ -1203,7 +1252,7 @@
                                   </div>
                                   <div class="flex items-center space-x-2 ml-2">
                                     <button class="text-blue-600 hover:text-blue-900 text-xs" on:click={() => openAddMemberModal(group)}>+ Member</button>
-                                    <button class="text-red-600 hover:text-red-900 text-xs" on:click={() => handleDeleteGroup(group.id)}>Del</button>
+                                    <button class="text-red-600 hover:text-red-900 text-xs" on:click={() => deleteGroup(group.id)}>Del</button>
                                   </div>
                                 </div>
                                 <!-- Group Members -->
@@ -1223,7 +1272,7 @@
                                     </div>
                                   </div>
                                 {/if}
-                                <!-- Group Reading Texts & Exercises -->
+                                <!-- Group Reading Texts & Exit Tickets -->
                                 {#if readingTexts.filter((t: any) => t.groupId === group.id).length > 0 || exercises.filter((e: any) => e.lessonId === lesson.id && readingTexts.filter((t: any) => t.groupId === group.id).some((t: any) => t.id === e.readingTextId)).length > 0}
                                   <div class="px-3 py-2 bg-white border-t border-purple-100 space-y-1">
                                     {#each readingTexts.filter((t: any) => t.groupId === group.id) as text}
@@ -1246,7 +1295,7 @@
                                         </div>
                                       </div>
                                     {/each}
-                                    <!-- Group Exercises -->
+                                    <!-- Group Exit Tickets -->
                                     {#each exercises.filter((e: any) => e.lessonId === lesson.id && readingTexts.filter((t: any) => t.groupId === group.id).some((t: any) => t.id === e.readingTextId)) as exercise}
                                       <div class="flex items-center justify-between p-1.5 bg-yellow-50 rounded">
                                         <div class="flex items-center min-w-0 flex-1">
@@ -1285,7 +1334,7 @@
                               </div>
                             {/each}
 
-                            <!-- Ungrouped Exercises (not linked to any group's reading text) -->
+                            <!-- Ungrouped Exit Tickets (not linked to any group's reading text) -->
                             {#each exercises.filter((e: any) => e.lessonId === lesson.id && !readingTexts.some((t: any) => t.groupId && t.lessonId === lesson.id && t.id === e.readingTextId)) as exercise}
                               <div class="flex items-center justify-between p-2 bg-yellow-50 rounded-md">
                                 <div class="flex items-center min-w-0 flex-1">
@@ -1416,9 +1465,8 @@
               </div>
               
               {#if exercises.length > 0}
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {#each exercises as exercise}
-                    <div class="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                {#snippet exerciseCard(exercise: any)}
+                    <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-1 hover:border-primary-200 transition-all duration-200">
                       <h4 class="text-sm font-medium text-gray-900 mb-2">{exercise.title}</h4>
                       <p class="text-xs text-gray-500 mb-3">{exercise.description || 'No description'}</p>
                       <div class="flex justify-between items-center">
@@ -1426,12 +1474,55 @@
                           {new Date(exercise.createdAt).toLocaleDateString()}
                         </span>
                         <div class="flex space-x-2">
-                          <button class="text-primary-600 hover:text-primary-900 text-xs">Edit</button>
-                          <button class="text-red-600 hover:text-red-900 text-xs">Delete</button>
+                          <Button variant="secondary" size="sm" on:click={() => goto(`/submissions/${exercise.id}`)}>
+                            <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                            View
+                          </Button>
+                          <Button variant="primary" size="sm" on:click={() => goto(`/exercises/${exercise.id}/edit`)}>
+                            <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                            Edit
+                          </Button>
+                          <Button variant="danger" size="sm">
+                            <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            Delete
+                          </Button>
                         </div>
                       </div>
                     </div>
+                {/snippet}
+
+                <div class="space-y-8">
+                  {#each lessons as lesson}
+                    {@const lessonExercises = exercises.filter((e: any) => e.lessonId === lesson.id)}
+                    {#if lessonExercises.length > 0}
+                      <div>
+                        <div class="flex items-center mb-4">
+                          <h4 class="text-md font-semibold text-gray-800">{lesson.title}</h4>
+                          <div class="ml-4 flex-grow border-t border-gray-200"></div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {#each lessonExercises as exercise}
+                            {@render exerciseCard(exercise)}
+                          {/each}
+                        </div>
+                      </div>
+                    {/if}
                   {/each}
+
+                  {#if exercises.some((e: any) => !e.lessonId)}
+                    {@const unassignedExercises = exercises.filter((e: any) => !e.lessonId)}
+                    <div>
+                      <div class="flex items-center mb-4">
+                        <h4 class="text-md font-semibold text-gray-800">Class-wide Exit Tickets</h4>
+                        <div class="ml-4 flex-grow border-t border-gray-200"></div>
+                      </div>
+                      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {#each unassignedExercises as exercise}
+                          {@render exerciseCard(exercise)}
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
                 </div>
               {:else}
                 <div class="text-center py-8">
@@ -1463,10 +1554,9 @@
               </div>
               
               {#if readingTexts.length > 0}
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {#each readingTexts as text}
+                {#snippet readingTextCard(text: any)}
                     {@const scheduleStatus = getScheduleStatus(text)}
-                    <div class="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                    <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-1 hover:border-primary-200 transition-all duration-200">
                       <div class="flex items-start justify-between mb-2">
                         <div class="flex-1">
                           <h4 class="text-sm font-medium text-gray-900 mb-1">{text.title}</h4>
@@ -1523,13 +1613,55 @@
                           {new Date(text.createdAt).toLocaleDateString()}
                         </span>
                         <div class="flex space-x-2">
-                          <button class="text-blue-600 hover:text-blue-900 text-xs" on:click={() => viewReadingText(text.id)}>View</button>
-                          <button class="text-primary-600 hover:text-primary-900 text-xs" on:click={() => editReadingText(text.id)}>Edit</button>
-                          <button class="text-red-600 hover:text-red-900 text-xs" on:click={() => deleteReadingText(text.id)}>Delete</button>
+                          <Button variant="secondary" size="sm" on:click={() => viewReadingText(text.id)}>
+                            <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                            View
+                          </Button>
+                          <Button variant="primary" size="sm" on:click={() => editReadingText(text.id)}>
+                            <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                            Edit
+                          </Button>
+                          <Button variant="danger" size="sm" on:click={() => deleteReadingText(text.id)}>
+                            <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            Delete
+                          </Button>
                         </div>
                       </div>
                     </div>
+                {/snippet}
+
+                <div class="space-y-8">
+                  {#each lessons as lesson}
+                    {@const lessonTexts = readingTexts.filter((t: any) => t.lessonId === lesson.id)}
+                    {#if lessonTexts.length > 0}
+                      <div>
+                        <div class="flex items-center mb-4">
+                          <h4 class="text-md font-semibold text-gray-800">{lesson.title}</h4>
+                          <div class="ml-4 flex-grow border-t border-gray-200"></div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {#each lessonTexts as text}
+                            {@render readingTextCard(text)}
+                          {/each}
+                        </div>
+                      </div>
+                    {/if}
                   {/each}
+
+                  {#if readingTexts.some((t: any) => !t.lessonId)}
+                    {@const unassignedTexts = readingTexts.filter((t: any) => !t.lessonId)}
+                    <div>
+                      <div class="flex items-center mb-4">
+                        <h4 class="text-md font-semibold text-gray-800">Class-wide Reading Texts</h4>
+                        <div class="ml-4 flex-grow border-t border-gray-200"></div>
+                      </div>
+                      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {#each unassignedTexts as text}
+                          {@render readingTextCard(text)}
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
                 </div>
               {:else}
                 <div class="text-center py-8">
@@ -1563,9 +1695,8 @@
               </div>
               
               {#if groups.length > 0}
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {#each groups as group}
-                    <div class="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                {#snippet groupCard(group: any)}
+                    <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-1 hover:border-primary-200 transition-all duration-200">
                       <div class="flex items-start justify-between mb-3">
                         <div class="flex-1">
                           <h4 class="text-sm font-medium text-gray-900 mb-1">{group.name}</h4>
@@ -1575,7 +1706,7 @@
         </div>
                         <button
                           class="text-red-600 hover:text-red-900 text-xs ml-2"
-                          on:click={() => handleDeleteGroup(group.id)}
+                          on:click={() => deleteGroup(group.id)}
                         >
                           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -1659,7 +1790,40 @@
                         </Button>
                       </div>
                     </div>
+                {/snippet}
+
+                <div class="space-y-8">
+                  {#each lessons as lesson}
+                    {@const lessonGroups = groups.filter((g: any) => g.lessonId === lesson.id)}
+                    {#if lessonGroups.length > 0}
+                      <div>
+                        <div class="flex items-center mb-4">
+                          <h4 class="text-md font-semibold text-gray-800">{lesson.title}</h4>
+                          <div class="ml-4 flex-grow border-t border-gray-200"></div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {#each lessonGroups as group}
+                            {@render groupCard(group)}
+                          {/each}
+                        </div>
+                      </div>
+                    {/if}
                   {/each}
+
+                  {#if groups.some((g: any) => !g.lessonId)}
+                    {@const unassignedGroups = groups.filter((g: any) => !g.lessonId)}
+                    <div>
+                      <div class="flex items-center mb-4">
+                        <h4 class="text-md font-semibold text-gray-800">Class-wide Groups</h4>
+                        <div class="ml-4 flex-grow border-t border-gray-200"></div>
+                      </div>
+                      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {#each unassignedGroups as group}
+                          {@render groupCard(group)}
+                        {/each}
+                      </div>
+                    </div>
+                  {/if}
                 </div>
               {:else}
                 <div class="text-center py-8">

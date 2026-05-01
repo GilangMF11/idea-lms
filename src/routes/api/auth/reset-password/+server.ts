@@ -14,9 +14,22 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
       );
     }
 
-    if (newPassword.length < 6) {
+    if (newPassword.length < 8) {
       return json(
-        { error: 'Password must be at least 6 characters long' },
+        { error: 'Password must be at least 8 characters long' },
+        { status: 400 }
+      );
+    }
+
+    // SECURITY: Enforce strong password policy
+    const hasUppercase = /[A-Z]/.test(newPassword);
+    const hasLowercase = /[a-z]/.test(newPassword);
+    const hasNumber = /[0-9]/.test(newPassword);
+    const hasSymbol = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPassword);
+    
+    if (!hasUppercase || !hasLowercase || !hasNumber || !hasSymbol) {
+      return json(
+        { error: 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one symbol.' },
         { status: 400 }
       );
     }

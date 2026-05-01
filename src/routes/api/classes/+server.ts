@@ -1,22 +1,13 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { prisma } from '$lib/database.js';
-import { verifyToken } from '$lib/auth.js';
+import { getAuthUser, apiError, requireTeacher, requireAdmin } from '$lib/api-utils.js';
 import { createHistory } from '$lib/history.js';
 
 
 export const GET: RequestHandler = async ({ request, url }: { request: any; url: any }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
-    if (!user) {
-      return json({ error: 'Invalid token' }, { status: 401 });
-    }
+    const user = getAuthUser(request);
 
     const classId = url.searchParams.get('id');
     
@@ -72,37 +63,69 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
       // Get all classes (existing logic)
       let classes;
       if (user.role === 'ADMIN') {
-        classes = await prisma.class.findMany({
-          include: {
-            teacher: {
-              select: {
-                id: true,
-                username: true,
-                firstName: true,
-                lastName: true,
+        const page = parseInt(url.searchParams.get('page') || '1');
+        const limit = parseInt(url.searchParams.get('limit') || '10');
+        const skip = (page - 1) * limit;
+        const search = url.searchParams.get('search') || '';
+        const teacherId = url.searchParams.get('teacherId') || '';
+
+        const whereClause: any = {};
+        
+        if (search) {
+          whereClause.OR = [
+            { name: { contains: search } },
+            { description: { contains: search } },
+            { teacher: { firstName: { contains: search } } },
+            { teacher: { lastName: { contains: search } } }
+          ];
+        }
+
+        if (teacherId) {
+          whereClause.teacherId = teacherId;
+        }
+
+        const [fetchedClasses, total] = await Promise.all([
+          prisma.class.findMany({
+            where: whereClause,
+            skip,
+            take: limit,
+            include: {
+              teacher: {
+                select: {
+                  id: true,
+                  username: true,
+                  firstName: true,
+                  lastName: true,
+                },
               },
-            },
-            students: {
-              include: {
-                student: {
-                  select: {
-                    id: true,
-                    username: true,
-                    firstName: true,
-                    lastName: true,
+              students: {
+                include: {
+                  student: {
+                    select: {
+                      id: true,
+                      username: true,
+                      firstName: true,
+                      lastName: true,
+                    },
                   },
                 },
               },
-            },
-            _count: {
-              select: {
-                students: true,
+              _count: {
+                select: {
+                  students: true,
+                },
               },
             },
-          },
-          orderBy: {
-            createdAt: 'desc',
-          },
+            orderBy: {
+              createdAt: 'desc',
+            },
+          }),
+          prisma.class.count({ where: whereClause })
+        ]);
+        
+        return json({ 
+          classes: fetchedClasses, 
+          pagination: { total, page, limit, totalPages: Math.ceil(total / limit) } 
         });
       } else if (user.role === 'TEACHER') {
         classes = await prisma.class.findMany({
@@ -167,20 +190,13 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
       return json({ classes });
     }
   } catch (error) {
-    console.error('Get classes error:', error);
-    return json({ error: 'Internal server error' }, { status: 500 });
+    return apiError(error);
   }
 };
 
 export const POST: RequestHandler = async ({ request }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
+    const user = getAuthUser(request);
     if (!user || user.role !== 'TEACHER') {
       return json({ error: 'Only teachers can create classes' }, { status: 403 });
     }
@@ -225,7 +241,6 @@ export const POST: RequestHandler = async ({ request }) => {
 
     return json({ class: newClass }, { status: 201 });
   } catch (error) {
-    console.error('Create class error:', error);
-    return json({ error: 'Internal server error' }, { status: 500 });
+    return apiError(error);
   }
 };

@@ -25,15 +25,7 @@
   let maxWords = '200';
 
   onMount(() => {
-    if (!$authStore.isAuthenticated || !['TEACHER', 'ADMIN'].includes($authStore.user?.role || '')) {
-      goto('/dashboard');
-      return;
-    }
-
-    // Get classId from URL params
-    classId = $page.url.searchParams.get('classId') || '';
-    lessonId = $page.url.searchParams.get('lessonId') || '';
-    loadClasses();
+    goto('/teacher/exit-tickets', { replaceState: true });
   });
 
   async function loadClasses() {
@@ -190,7 +182,7 @@
 </script>
 
 <svelte:head>
-  <title>Create Exercise - IDEA</title>
+  <title>Create Exit Ticket - IDEA</title>
 </svelte:head>
 
 <div class="min-h-screen bg-gray-50">
@@ -257,7 +249,7 @@
                   bind:value={description}
                   rows="3"
                   class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                  placeholder="Enter exercise description (optional)"
+                  placeholder="Enter exit ticket description (optional)"
                 ></textarea>
               </div>
 
@@ -412,7 +404,7 @@
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
               {/if}
-              {loading ? 'Creating...' : 'Create Exercise'}
+              {loading ? 'Creating...' : 'Create Exit Ticket'}
             </Button>
           </div>
         </div>

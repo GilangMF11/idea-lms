@@ -1,20 +1,11 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { prisma } from '$lib/database.js';
-import { verifyToken } from '$lib/auth.js';
+import { getAuthUser, requireTeacher, apiError } from '$lib/api-utils.js';
 
-export const GET: RequestHandler = async ({ request, url }: { request: any; url: any }) => {
+export const GET: RequestHandler = async ({ request, url }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
-    if (!user) {
-      return json({ error: 'Invalid token' }, { status: 401 });
-    }
+    const user = getAuthUser(request);
 
     const classId = url.searchParams.get('classId');
 
@@ -53,23 +44,14 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
 
     return json({ lessons });
   } catch (error) {
-    console.error('Get lessons error:', error);
-    return json({ error: 'Internal server error' }, { status: 500 });
+    return apiError(error);
   }
 };
 
-export const POST: RequestHandler = async ({ request }: { request: any }) => {
+export const POST: RequestHandler = async ({ request }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
-    if (!user || (user.role !== 'TEACHER' && user.role !== 'ADMIN')) {
-      return json({ error: 'Only teachers and admins can create lessons' }, { status: 403 });
-    }
+    const user = getAuthUser(request);
+    requireTeacher(user);
 
     const { title, description, classId, order, scheduledAt, isActive } = await request.json();
 
@@ -118,23 +100,14 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
 
     return json({ lesson }, { status: 201 });
   } catch (error) {
-    console.error('Create lesson error:', error);
-    return json({ error: 'Internal server error' }, { status: 500 });
+    return apiError(error);
   }
 };
 
-export const PUT: RequestHandler = async ({ request }: { request: any }) => {
+export const PUT: RequestHandler = async ({ request }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
-    if (!user || (user.role !== 'TEACHER' && user.role !== 'ADMIN')) {
-      return json({ error: 'Only teachers and admins can update lessons' }, { status: 403 });
-    }
+    const user = getAuthUser(request);
+    requireTeacher(user);
 
     const { id, title, description, order, scheduledAt, isActive } = await request.json();
 
@@ -177,23 +150,14 @@ export const PUT: RequestHandler = async ({ request }: { request: any }) => {
 
     return json({ lesson });
   } catch (error) {
-    console.error('Update lesson error:', error);
-    return json({ error: 'Internal server error' }, { status: 500 });
+    return apiError(error);
   }
 };
 
-export const DELETE: RequestHandler = async ({ request, url }: { request: any; url: any }) => {
+export const DELETE: RequestHandler = async ({ request, url }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
-    if (!user || (user.role !== 'TEACHER' && user.role !== 'ADMIN')) {
-      return json({ error: 'Only teachers and admins can delete lessons' }, { status: 403 });
-    }
+    const user = getAuthUser(request);
+    requireTeacher(user);
 
     const id = url.searchParams.get('id');
 
@@ -218,7 +182,6 @@ export const DELETE: RequestHandler = async ({ request, url }: { request: any; u
 
     return json({ success: true });
   } catch (error) {
-    console.error('Delete lesson error:', error);
-    return json({ error: 'Internal server error' }, { status: 500 });
+    return apiError(error);
   }
 };

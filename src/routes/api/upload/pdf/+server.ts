@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
-import { verifyToken } from '$lib/auth.js';
+import { getAuthUser, apiError, requireTeacher, requireAdmin } from '$lib/api-utils.js';
 import type { RequestHandler } from '@sveltejs/kit';
 
 const ALLOWED_TYPES = ['application/pdf'];
@@ -9,13 +9,7 @@ const MAX_SIZE = 15 * 1024 * 1024; // 15MB
 
 export const POST: RequestHandler = async ({ request }: { request: any }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
+    const user = getAuthUser(request);
     if (!user || !['TEACHER', 'ADMIN'].includes(user.role || '')) {
       return json({ error: 'Only teachers and admins can upload PDFs' }, { status: 403 });
     }

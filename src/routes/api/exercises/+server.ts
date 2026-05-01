@@ -1,20 +1,11 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { prisma } from '$lib/database.js';
-import { verifyToken } from '$lib/auth.js';
+import { getAuthUser, apiError, requireTeacher, requireAdmin } from '$lib/api-utils.js';
 
 export const GET: RequestHandler = async ({ request, url }: { request: any; url: any }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
-    if (!user) {
-      return json({ error: 'Invalid token' }, { status: 401 });
-    }
+    const user = getAuthUser(request);
 
     const classIdParam = url.searchParams.get('classId');
     const readingTextId = url.searchParams.get('readingTextId');
@@ -186,20 +177,13 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
 
     return json({ exercises });
   } catch (error) {
-    console.error('Get exercises error:', error);
-    return json({ error: 'Internal server error' }, { status: 500 });
+    return apiError(error);
   }
 };
 
 export const POST: RequestHandler = async ({ request }: { request: any }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
+    const user = getAuthUser(request);
     if (!user || user.role !== 'TEACHER') {
       return json({ error: 'Only teachers can create exercises' }, { status: 403 });
     }
@@ -227,7 +211,7 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
     }
 
     if (!content || !content.trim()) {
-      return json({ error: 'Exercise content is required' }, { status: 400 });
+      return json({ error: 'Exit ticket content is required' }, { status: 400 });
     }
 
     let normalizedTimerDuration: number | null = null;
@@ -285,20 +269,13 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
 
     return json({ exercise }, { status: 201 });
   } catch (error) {
-    console.error('Create exercise error:', error);
-    return json({ error: 'Internal server error' }, { status: 500 });
+    return apiError(error);
   }
 };
 
 export const PUT: RequestHandler = async ({ request }: { request: any }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
+    const user = getAuthUser(request);
     if (!user || user.role !== 'TEACHER') {
       return json({ error: 'Only teachers can update exercises' }, { status: 403 });
     }
@@ -316,7 +293,7 @@ export const PUT: RequestHandler = async ({ request }: { request: any }) => {
     } = await request.json();
 
     if (!id) {
-      return json({ error: 'Exercise ID is required' }, { status: 400 });
+      return json({ error: 'Exit ticket ID is required' }, { status: 400 });
     }
 
     // Check if exercise exists and user is the teacher
@@ -328,7 +305,7 @@ export const PUT: RequestHandler = async ({ request }: { request: any }) => {
     });
 
     if (!existingExercise) {
-      return json({ error: 'Exercise not found' }, { status: 404 });
+      return json({ error: 'Exit ticket not found' }, { status: 404 });
     }
 
     if (existingExercise.class.teacherId !== user.id) {
@@ -375,20 +352,13 @@ export const PUT: RequestHandler = async ({ request }: { request: any }) => {
 
     return json({ exercise });
   } catch (error) {
-    console.error('Update exercise error:', error);
-    return json({ error: 'Internal server error' }, { status: 500 });
+    return apiError(error);
   }
 };
 
 export const DELETE: RequestHandler = async ({ request }: { request: any }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
+    const user = getAuthUser(request);
     if (!user || user.role !== 'TEACHER') {
       return json({ error: 'Only teachers can delete exercises' }, { status: 403 });
     }
@@ -396,7 +366,7 @@ export const DELETE: RequestHandler = async ({ request }: { request: any }) => {
     const { id } = await request.json();
 
     if (!id) {
-      return json({ error: 'Exercise ID is required' }, { status: 400 });
+      return json({ error: 'Exit ticket ID is required' }, { status: 400 });
     }
 
     // Check if exercise exists and user is the teacher
@@ -408,7 +378,7 @@ export const DELETE: RequestHandler = async ({ request }: { request: any }) => {
     });
 
     if (!existingExercise) {
-      return json({ error: 'Exercise not found' }, { status: 404 });
+      return json({ error: 'Exit ticket not found' }, { status: 404 });
     }
 
     if (existingExercise.class.teacherId !== user.id) {
@@ -422,7 +392,6 @@ export const DELETE: RequestHandler = async ({ request }: { request: any }) => {
 
     return json({ success: true });
   } catch (error) {
-    console.error('Delete exercise error:', error);
-    return json({ error: 'Internal server error' }, { status: 500 });
+    return apiError(error);
   }
 };

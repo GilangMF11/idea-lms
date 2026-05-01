@@ -1,0 +1,101 @@
+1551:            <!-- Groups Tab -->
+1552-            <div class="space-y-4">
+1553-              <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+1554-                <h3 class="text-base sm:text-lg font-medium text-gray-900">Groups ({groups.length})</h3>
+1555-                <Button variant="primary" size="sm" on:click={() => {
+1556-                  openCreateGroupModal();
+1557-                }}>
+1558-                  <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+1559-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+1560-                  </svg>
+1561-                  Create Group
+1562-                </Button>
+1563-              </div>
+1564-              
+1565-              {#if groups.length > 0}
+1566-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+1567-                  {#each groups as group}
+1568-                    <div class="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+1569-                      <div class="flex items-start justify-between mb-3">
+1570-                        <div class="flex-1">
+1571-                          <h4 class="text-sm font-medium text-gray-900 mb-1">{group.name}</h4>
+1572-                          {#if group.description}
+1573-                            <p class="text-xs text-gray-500 line-clamp-2">{group.description}</p>
+1574-          {/if}
+1575-        </div>
+1576-                        <button
+1577-                          class="text-red-600 hover:text-red-900 text-xs ml-2"
+1578-                          on:click={() => handleDeleteGroup(group.id)}
+1579-                        >
+1580-                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+1581-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+1582-                          </svg>
+1583-                        </button>
+1584-      </div>
+1585-                      <div class="space-y-2 text-xs text-gray-600">
+1586-                        <div class="flex items-center">
+1587-                          <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+1588-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+1589-                          </svg>
+1590-                          {group._count.members} member{group._count.members !== 1 ? 's' : ''}
+1591-                        </div>
+1592-                        <div class="flex items-center">
+1593-                          <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+1594-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+1595-                          </svg>
+1596-                          {group._count.readingTexts} reading text{group._count.readingTexts !== 1 ? 's' : ''}
+1597-                        </div>
+1598-                      </div>
+1599-                      {#if group.members.length > 0}
+1600-                        <div class="mt-3 pt-3 border-t border-gray-200">
+1601-                          <p class="text-xs font-medium text-gray-700 mb-2">Members:</p>
+1602-                          <div class="flex flex-wrap gap-1">
+1603-                            {#each group.members.slice(0, 3) as member}
+1604-                              <span class="inline-flex items-center px-2 py-1 rounded-md text-xs bg-gray-100 text-gray-700">
+1605-                                {member.student.firstName} {member.student.lastName}
+1606-                              </span>
+1607-                            {/each}
+1608-                            {#if group.members.length > 3}
+1609-                              <span class="inline-flex items-center px-2 py-1 rounded-md text-xs bg-gray-100 text-gray-700">
+1610-                                +{group.members.length - 3} more
+1611-                              </span>
+1612-                            {/if}
+1613-                          </div>
+1614-                        </div>
+1615-                      {/if}
+1616-                      {#if group.readingTexts && group.readingTexts.length > 0}
+1617-                        <div class="mt-3 pt-3 border-t border-gray-200">
+1618-                          <p class="text-xs font-medium text-gray-700 mb-2">Reading Texts:</p>
+1619-                          <div class="space-y-1">
+1620-                            {#each group.readingTexts.slice(0, 3) as text}
+1621-                              <div class="flex items-center justify-between text-xs">
+1622-                                <span class="text-gray-600 truncate flex-1">{text.title}</span>
+1623-                                <button 
+1624-                                  class="text-primary-600 hover:text-primary-900 ml-2"
+1625-                                  on:click={() => viewReadingText(text.id)}
+1626-                                >
+1627-                                  View
+1628-                                </button>
+1629-                              </div>
+1630-                            {/each}
+1631-                            {#if group.readingTexts.length > 3}
+1632-                              <p class="text-xs text-gray-500 mt-1">+{group.readingTexts.length - 3} more</p>
+1633-                            {/if}
+1634-                          </div>
+1635-                        </div>
+1636-                      {/if}
+1637-                      <div class="mt-3 pt-3 border-t border-gray-200 space-y-2">
+1638-                        <Button 
+1639-                          variant="secondary" 
+1640-                          size="sm" 
+1641-                          fullWidth
+1642-                          on:click={() => goto(`/reading-texts/create?classId=${$page.params.id}&groupId=${group.id}`)}
+1643-                        >
+1644-                          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+1645-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+1646-                          </svg>
+1647-                          Add Reading Text
+1648-                        </Button>
+1649-                        <Button
+1650-                          variant="primary"
+1651-                          size="sm"

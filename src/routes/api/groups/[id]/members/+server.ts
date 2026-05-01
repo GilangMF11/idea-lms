@@ -1,21 +1,12 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { prisma } from '$lib/database.js';
-import { verifyToken } from '$lib/auth.js';
+import { getAuthUser, apiError, requireTeacher, requireAdmin } from '$lib/api-utils.js';
 
 // POST - Add member to group (teacher can add student, student can join themselves)
 export const POST: RequestHandler = async ({ request, params }: { request: any; params: any }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
-    if (!user) {
-      return json({ error: 'Invalid token' }, { status: 401 });
-    }
+    const user = getAuthUser(request);
 
     const groupId = params.id;
     const { studentId, role } = await request.json();
@@ -121,21 +112,14 @@ export const POST: RequestHandler = async ({ request, params }: { request: any; 
 
     return json({ member }, { status: 201 });
   } catch (error) {
-    console.error('Add group member error:', error);
-    return json({ error: 'Internal server error' }, { status: 500 });
+    return apiError(error);
   }
 };
 
 // DELETE - Remove member from group
 export const DELETE: RequestHandler = async ({ request, params, url }: { request: any; params: any; url: any }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
+    const user = getAuthUser(request);
     if (!user || !['TEACHER', 'ADMIN'].includes(user.role)) {
       return json({ error: 'Only teachers and admins can remove members from groups' }, { status: 403 });
     }
@@ -177,8 +161,7 @@ export const DELETE: RequestHandler = async ({ request, params, url }: { request
 
     return json({ success: true });
   } catch (error) {
-    console.error('Remove group member error:', error);
-    return json({ error: 'Internal server error' }, { status: 500 });
+    return apiError(error);
   }
 };
 

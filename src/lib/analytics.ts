@@ -18,6 +18,20 @@ export interface ClassAnalytics {
   }>;
 }
 
+export interface TeacherAnalytics {
+  totalClasses: number;
+  totalStudents: number;
+  totalReadingTexts: number;
+  totalExercises: number;
+  activityTrends: number[];
+  recentActivity: Array<{
+    type: string;
+    title: string;
+    timestamp: Date;
+    classId: string;
+  }>;
+}
+
 export interface UserAnalytics {
   totalClasses: number;
   totalDrafts: number;
@@ -101,6 +115,96 @@ export class AnalyticsService {
       averageDraftScore,
       recentActivity,
     };
+  }
+
+  async getTeacherAnalytics(teacherId: string): Promise<TeacherAnalytics> {
+    const classes = await prisma.class.findMany({
+      where: { teacherId: teacherId, isActive: true },
+      select: { id: true }
+    });
+    const classIds = classes.map((c: any) => c.id);
+
+    const [
+      totalStudents,
+      totalReadingTexts,
+      totalExercises,
+      recentActivityData,
+      activityTrendsData
+    ] = await Promise.all([
+      prisma.classStudent.count({ where: { classId: { in: classIds } } }),
+      prisma.readingText.count({ where: { classId: { in: classIds }, isActive: true } }),
+      prisma.exercise.count({ where: { classId: { in: classIds }, isActive: true } }),
+      this.getTeacherRecentActivity(classIds),
+      this.getTeacherActivityTrends(classIds)
+    ]);
+
+    return {
+      totalClasses: classIds.length,
+      totalStudents,
+      totalReadingTexts,
+      totalExercises,
+      activityTrends: activityTrendsData,
+      recentActivity: recentActivityData,
+    };
+  }
+
+  private async getTeacherActivityTrends(classIds: string[]): Promise<number[]> {
+    const counts = [0, 0, 0, 0, 0, 0, 0];
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const [exercises, texts] = await Promise.all([
+      prisma.exercise.findMany({ where: { classId: { in: classIds }, createdAt: { gte: sevenDaysAgo } }, select: { createdAt: true } }),
+      prisma.readingText.findMany({ where: { classId: { in: classIds }, createdAt: { gte: sevenDaysAgo } }, select: { createdAt: true } })
+    ]);
+
+    [...exercises, ...texts].forEach(item => {
+      const diffTime = Math.abs(today.getTime() - item.createdAt.getTime());
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      if (diffDays < 7 && diffDays >= 0) counts[6 - diffDays]++;
+    });
+    return counts;
+  }
+
+  private async getTeacherRecentActivity(classIds: string[]): Promise<Array<{
+    type: string;
+    title: string;
+    timestamp: Date;
+    classId: string;
+  }>> {
+    const activities = [];
+
+    // Recent reading texts
+    const readingTexts = await prisma.readingText.findMany({
+      where: { classId: { in: classIds } },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    });
+    activities.push(...readingTexts.map((text: any) => ({
+      type: 'reading_text',
+      title: text.title,
+      timestamp: text.createdAt,
+      classId: text.classId,
+    })));
+
+    // Recent exercises
+    const exercises = await prisma.exercise.findMany({
+      where: { classId: { in: classIds } },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    });
+    activities.push(...exercises.map((exercise: any) => ({
+      type: 'exercise',
+      title: exercise.title,
+      timestamp: exercise.createdAt,
+      classId: exercise.classId,
+    })));
+
+    // Sort by timestamp and return top 10
+    return activities
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      .slice(0, 10);
   }
 
   private async getTotalStudents(classId: string): Promise<number> {
@@ -372,6 +476,13 @@ export class AnalyticsService {
     totalAnnotations: number;
     totalChatMessages: number;
     activeUsers: number;
+    activityTrends: number[];
+    recentActivity: Array<{
+      type: string;
+      title: string;
+      timestamp: Date;
+      user: string;
+    }>;
   }> {
     const [
       totalUsers,
@@ -382,6 +493,8 @@ export class AnalyticsService {
       totalAnnotations,
       totalChatMessages,
       activeUsers,
+      recentActivity,
+      activityTrends,
     ] = await Promise.all([
       prisma.user.count({ where: { isActive: true } }),
       prisma.class.count({ where: { isActive: true } }),
@@ -391,6 +504,8 @@ export class AnalyticsService {
       prisma.annotation.count({ where: { isPublic: true } }),
       prisma.chatMessage.count(),
       this.getActiveUsers(),
+      this.getSystemRecentActivity(),
+      this.getSystemActivityTrends(),
     ]);
 
     return {
@@ -402,7 +517,66 @@ export class AnalyticsService {
       totalAnnotations,
       totalChatMessages,
       activeUsers,
+      recentActivity,
+      activityTrends,
     };
+  }
+
+  private async getSystemActivityTrends(): Promise<number[]> {
+    const counts = [0, 0, 0, 0, 0, 0, 0];
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const [users, classes] = await Promise.all([
+      prisma.user.findMany({ where: { createdAt: { gte: sevenDaysAgo } }, select: { createdAt: true } }),
+      prisma.class.findMany({ where: { createdAt: { gte: sevenDaysAgo } }, select: { createdAt: true } })
+    ]);
+
+    [...users, ...classes].forEach(item => {
+      const diffTime = Math.abs(today.getTime() - item.createdAt.getTime());
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      if (diffDays < 7 && diffDays >= 0) counts[6 - diffDays]++;
+    });
+    return counts;
+  }
+
+  private async getSystemRecentActivity(): Promise<Array<{
+    type: string;
+    title: string;
+    timestamp: Date;
+    user: string;
+  }>> {
+    const activities = [];
+
+    // Recent classes
+    const classes = await prisma.class.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+      include: { teacher: true }
+    });
+    activities.push(...classes.map((c: any) => ({
+      type: 'class',
+      title: `New class: ${c.name}`,
+      timestamp: c.createdAt,
+      user: c.teacher ? `${c.teacher.firstName} ${c.teacher.lastName}` : 'System',
+    })));
+
+    // Recent users
+    const users = await prisma.user.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    });
+    activities.push(...users.map((u: any) => ({
+      type: 'user',
+      title: `New user joined`,
+      timestamp: u.createdAt,
+      user: `${u.firstName} ${u.lastName}`,
+    })));
+
+    return activities
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      .slice(0, 10);
   }
 
   private async getActiveUsers(): Promise<number> {

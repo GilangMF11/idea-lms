@@ -1,21 +1,12 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { prisma } from '$lib/database.js';
-import { verifyToken } from '$lib/auth.js';
+import { getAuthUser, apiError, requireTeacher, requireAdmin } from '$lib/api-utils.js';
 import { createHistory } from '$lib/history.js';
 
 export const GET: RequestHandler = async ({ request, url }: { request: any; url: any }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
-    if (!user) {
-      return json({ error: 'Invalid token' }, { status: 401 });
-    }
+    const user = getAuthUser(request);
 
     const classId = url.searchParams.get('classId');
     if (!classId) {
@@ -65,23 +56,13 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
 
     return json({ outlines });
   } catch (error) {
-    console.error('Get writing outlines error:', error);
-    return json({ error: 'Internal server error' }, { status: 500 });
+    return apiError(error);
   }
 };
 
 export const POST: RequestHandler = async ({ request }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
-    if (!user) {
-      return json({ error: 'Invalid token' }, { status: 401 });
-    }
+    const user = getAuthUser(request);
 
     const { title, content, classId } = await request.json();
 
@@ -135,23 +116,13 @@ export const POST: RequestHandler = async ({ request }) => {
 
     return json({ outline }, { status: 201 });
   } catch (error) {
-    console.error('Create writing outline error:', error);
-    return json({ error: 'Internal server error' }, { status: 500 });
+    return apiError(error);
   }
 };
 
 export const PATCH: RequestHandler = async ({ request, url }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
-    if (!user) {
-      return json({ error: 'Invalid token' }, { status: 401 });
-    }
+    const user = getAuthUser(request);
 
     const outlineId = url.searchParams.get('id');
     if (!outlineId) {
@@ -207,23 +178,13 @@ export const PATCH: RequestHandler = async ({ request, url }) => {
 
     return json({ outline: updatedOutline });
   } catch (error) {
-    console.error('Update writing outline error:', error);
-    return json({ error: 'Internal server error' }, { status: 500 });
+    return apiError(error);
   }
 };
 
 export const DELETE: RequestHandler = async ({ request, url }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
-    if (!user) {
-      return json({ error: 'Invalid token' }, { status: 401 });
-    }
+    const user = getAuthUser(request);
 
     const outlineId = url.searchParams.get('id');
     if (!outlineId) {
@@ -261,7 +222,6 @@ export const DELETE: RequestHandler = async ({ request, url }) => {
 
     return json({ message: 'Outline deleted successfully' });
   } catch (error) {
-    console.error('Delete writing outline error:', error);
-    return json({ error: 'Internal server error' }, { status: 500 });
+    return apiError(error);
   }
 };

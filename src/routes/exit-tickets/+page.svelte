@@ -88,7 +88,7 @@
         <div class="flex items-center min-w-0 flex-1">
           <div class="mr-3 sm:mr-4 flex-shrink-0">
             <Button variant="secondary" size="sm" on:click={goBack}>
-              <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg class="w-4 h-4 mr-0 sm:mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
               </svg>
               <span class="hidden sm:inline">Back</span>

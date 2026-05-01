@@ -1,23 +1,17 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { prisma } from '$lib/database.js';
-import { verifyToken } from '$lib/auth.js';
+import { getAuthUser, apiError, requireTeacher, requireAdmin } from '$lib/api-utils.js';
 import { createHistory } from '$lib/history.js';
 
 export const DELETE: RequestHandler = async ({ request, params }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
-    if (!user) {
-      return json({ error: 'Invalid token' }, { status: 401 });
-    }
+    const user = getAuthUser(request);
 
     const classId = params.id;
+    const url = new URL(request.url);
+    const isPermanent = url.searchParams.get('permanent') === 'true';
+
     if (!classId) {
       return json({ error: 'Class ID is required' }, { status: 400 });
     }
@@ -35,6 +29,14 @@ export const DELETE: RequestHandler = async ({ request, params }) => {
       return json({ error: 'Access denied' }, { status: 403 });
     } else if (user.role === 'TEACHER' && classData.teacherId !== user.id) {
       return json({ error: 'Access denied' }, { status: 403 });
+    }
+
+    if (isPermanent && user.role === 'ADMIN') {
+      // Perform hard delete
+      await prisma.class.delete({
+        where: { id: classId },
+      });
+      return json({ success: true, message: 'Class permanently deleted' });
     }
 
     // Perform soft delete
@@ -56,7 +58,6 @@ export const DELETE: RequestHandler = async ({ request, params }) => {
 
     return json({ success: true, message: 'Class deleted successfully' });
   } catch (error) {
-    console.error('Delete class error:', error);
-    return json({ error: 'Internal server error' }, { status: 500 });
+    return apiError(error);
   }
 };

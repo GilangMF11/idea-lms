@@ -1,25 +1,16 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 import { prisma } from '$lib/database.js';
-import { verifyToken } from '$lib/auth.js';
+import { getAuthUser, apiError, requireTeacher, requireAdmin } from '$lib/api-utils.js';
 import { createHistory } from '$lib/history.js';
 
 export const GET: RequestHandler = async ({ request, url }: { request: any; url: any }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
-    if (!user) {
-      return json({ error: 'Invalid token' }, { status: 401 });
-    }
+    const user = getAuthUser(request);
 
     const exerciseId = url.searchParams.get('exerciseId');
     if (!exerciseId) {
-      return json({ error: 'Exercise ID is required' }, { status: 400 });
+      return json({ error: 'Exit ticket ID is required' }, { status: 400 });
     }
 
     // Check if user has access to this exercise
@@ -36,7 +27,7 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
     });
 
     if (!exercise) {
-      return json({ error: 'Exercise not found or access denied' }, { status: 404 });
+      return json({ error: 'Exit ticket not found or access denied' }, { status: 404 });
     }
 
     const submissions = await prisma.exerciseSubmission.findMany({
@@ -61,23 +52,13 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
 
     return json({ submissions });
   } catch (error) {
-    console.error('Get exercise submissions error:', error);
-    return json({ error: 'Internal server error' }, { status: 500 });
+    return apiError(error);
   }
 };
 
 export const POST: RequestHandler = async ({ request }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
-    if (!user) {
-      return json({ error: 'Invalid token' }, { status: 401 });
-    }
+    const user = getAuthUser(request);
 
     const { exerciseId, answer } = await request.json();
 
@@ -99,7 +80,7 @@ export const POST: RequestHandler = async ({ request }) => {
     });
 
     if (!exercise) {
-      return json({ error: 'Exercise not found or access denied' }, { status: 404 });
+      return json({ error: 'Exit ticket not found or access denied' }, { status: 404 });
     }
 
     // Check if submission already exists
@@ -160,20 +141,13 @@ export const POST: RequestHandler = async ({ request }) => {
 
     return json({ submission }, { status: 201 });
   } catch (error) {
-    console.error('Create exercise submission error:', error);
-    return json({ error: 'Internal server error' }, { status: 500 });
+    return apiError(error);
   }
 };
 
 export const PATCH: RequestHandler = async ({ request, url }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
+    const user = getAuthUser(request);
     if (!user || user.role !== 'TEACHER') {
       return json({ error: 'Only teachers can grade submissions' }, { status: 403 });
     }
@@ -243,7 +217,6 @@ export const PATCH: RequestHandler = async ({ request, url }) => {
 
     return json({ submission: updatedSubmission });
   } catch (error) {
-    console.error('Update exercise submission error:', error);
-    return json({ error: 'Internal server error' }, { status: 500 });
+    return apiError(error);
   }
 };

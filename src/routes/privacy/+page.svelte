@@ -74,7 +74,7 @@
     <article class="prose prose-blue max-w-none">
       <!-- Last Updated -->
       <p class="text-sm text-gray-500 mb-8">
-        Last Updated: <time datetime="2025-03-31">March 31, 2025</time>
+        Last Updated: <time datetime="2026-04-23">April 23, 2026</time>
       </p>
 
       <!-- Introduction -->
@@ -212,7 +212,7 @@
           <li><strong>Objection:</strong> Object to processing of your data</li>
           <li><strong>Withdrawal:</strong> Withdraw consent for data processing</li>
         </ul>
-        <h3 class="text-lg font-semibold text-gray-900 mb-2">7.1. How to Exercise Your Rights</h3>
+        <h3 class="text-lg font-semibold text-gray-900 mb-2">7.1. How to Exit Ticket Your Rights</h3>
         <p class="text-gray-700 mb-4">
           To exercise these rights, please contact us using the information provided in Section 10. We will respond to your request within 30 days, subject to legal requirements.
         </p>

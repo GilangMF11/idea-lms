@@ -7,6 +7,7 @@
   import Button from '$lib/components/Button.svelte';
   import Alert from '$lib/components/Alert.svelte';
   import PdfViewer from '$lib/components/PdfViewer.svelte';
+  import { sanitizeHtml } from '$lib/sanitize.js';
 
   let readingText: any = null;
   let annotations: any[] = [];
@@ -191,10 +192,15 @@
   function initReadingTimer(durationSeconds: number) {
     timerDurationSeconds = durationSeconds || 0;
 
+    // Timer only applies to STUDENT role. For TEACHER/ADMIN, behave as if timer doesn't exist.
+    if ($authStore.user?.role !== 'STUDENT') {
+      timerDurationSeconds = 0;
+    }
+
     if (!timerDurationSeconds) {
       timerRemainingSeconds = 0;
       timerActive = false;
-      timerFinished = true;
+      timerFinished = false; // Setting to false so they don't get locked out
       clearTimerInterval();
       return;
     }
@@ -1206,7 +1212,7 @@
                     }
                   }}
                 >
-                  {@html readingText.content || ''}
+                  {@html sanitizeHtml(readingText.content || '')}
                 </div>
               </div>
             {/if}

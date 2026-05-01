@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
-import { verifyToken } from '$lib/auth.js';
+import { getAuthUser, apiError, requireTeacher, requireAdmin } from '$lib/api-utils.js';
 import type { RequestHandler } from '@sveltejs/kit';
 
 // GET - Not implemented for audio upload
@@ -12,13 +12,7 @@ export const GET: RequestHandler = async () => {
 // POST - Upload audio
 export const POST: RequestHandler = async ({ request }: { request: any }) => {
   try {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    const user = verifyToken(token);
+    const user = getAuthUser(request);
     // Allow all authenticated roles to upload audio for chat (students, teachers, admins)
     if (!user) {
       return json({ error: 'Unauthorized' }, { status: 401 });
