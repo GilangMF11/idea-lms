@@ -12,8 +12,8 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 3000,
         HOST: '127.0.0.1',
-        ORIGIN: 'https://yourdomain.com', // Ganti dengan domain kamu
-        BODY_SIZE_LIMIT: '50M',
+        ORIGIN: 'https://idea-space.my.id',
+        BODY_SIZE_LIMIT: '52428800',  // 50MB dalam bytes
       },
     },
   ],

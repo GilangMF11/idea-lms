@@ -36,6 +36,15 @@
   let timerPaused = false;
   let tabVisible = true;
 
+  // Teacher: view all submissions
+  let classStudents: any[] = [];
+  let allSubmissions: any[] = [];
+  let selectedStudentSubmission: any = null;
+  let gradingScore = '';
+  let gradingFeedback = '';
+  let gradingLoading = false;
+  let gradingSuccess = '';
+
   function countWords(text: string): number {
     return text.trim().split(/\s+/).filter(w => w.length > 0).length;
   }
@@ -133,9 +142,84 @@
         if (submission) {
           stopExerciseTimer();
         }
+
+        // If teacher/admin, also build the full submissions view
+        if (['TEACHER', 'ADMIN'].includes($authStore.user?.role || '')) {
+          allSubmissions = submissions;
+          await loadClassStudents();
+        }
       }
     } catch (err) {
       console.error('Error loading submissions:', err);
+    }
+  }
+
+  async function loadClassStudents() {
+    if (!exercise?.classId) return;
+    try {
+      const response = await fetch(`/api/classes?id=${exercise.classId}`, {
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        classStudents = data.class?.students?.map((cs: any) => ({
+          id: cs.student?.id || cs.studentId,
+          firstName: cs.student?.firstName || '?',
+          lastName: cs.student?.lastName || '',
+          username: cs.student?.username || ''
+        })) || [];
+      }
+    } catch (err) {
+      console.error('Error loading class students:', err);
+    }
+  }
+
+  function openStudentSubmission(sub: any) {
+    selectedStudentSubmission = sub;
+    gradingScore = sub.score != null ? String(sub.score) : '';
+    gradingFeedback = sub.feedback || '';
+    gradingSuccess = '';
+  }
+
+  function closeStudentSubmission() {
+    selectedStudentSubmission = null;
+    gradingScore = '';
+    gradingFeedback = '';
+    gradingSuccess = '';
+  }
+
+  async function submitGrade() {
+    if (!selectedStudentSubmission) return;
+    gradingLoading = true;
+    gradingSuccess = '';
+    try {
+      const response = await fetch(`/api/exercise-submissions?id=${selectedStudentSubmission.id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${$authStore.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          score: gradingScore ? parseInt(gradingScore) : null,
+          feedback: gradingFeedback || null
+        })
+      });
+      if (response.ok) {
+        gradingSuccess = 'Nilai berhasil disimpan!';
+        // Refresh submissions
+        await loadSubmissions();
+        setTimeout(() => closeStudentSubmission(), 1500);
+      } else {
+        const data = await response.json();
+        error = data.error || 'Gagal menyimpan nilai';
+      }
+    } catch (err) {
+      error = 'Gagal menyimpan nilai';
+    } finally {
+      gradingLoading = false;
     }
   }
 
@@ -1212,6 +1296,115 @@
           </div>
         </div>
       {/if}
+
+      <!-- Teacher/Admin: All Submissions Section -->
+      {#if ['TEACHER', 'ADMIN'].includes($authStore.user?.role || '')}
+        <div class="card mt-6 overflow-hidden">
+          <div class="bg-gray-50 px-6 py-4 border-b border-gray-200">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <div class="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                  <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+                <h2 class="text-xl font-semibold text-gray-900">Student Submissions</h2>
+              </div>
+              <span class="text-sm text-gray-500">
+                {allSubmissions.length}/{classStudents.length} submitted
+              </span>
+            </div>
+          </div>
+
+          <div class="p-6">
+            {#if allSubmissions.length === 0 && classStudents.length === 0}
+              <p class="text-center text-gray-500 py-8">Belum ada data submissions.</p>
+            {:else}
+              <!-- Progress bar -->
+              <div class="mb-6">
+                <div class="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    class="h-2 rounded-full transition-all duration-300 {allSubmissions.length === classStudents.length && classStudents.length > 0 ? 'bg-green-500' : 'bg-primary-500'}"
+                    style="width: {classStudents.length > 0 ? Math.round((allSubmissions.length / classStudents.length) * 100) : 0}%"
+                  ></div>
+                </div>
+              </div>
+
+              <!-- Submitted students -->
+              {#if allSubmissions.length > 0}
+                <div class="mb-6">
+                  <h3 class="text-sm font-semibold text-green-700 mb-3 flex items-center">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Sudah Submit ({allSubmissions.length})
+                  </h3>
+                  <div class="space-y-3">
+                    {#each allSubmissions as sub}
+                      <button
+                        type="button"
+                        class="w-full text-left border border-gray-200 rounded-lg p-4 hover:border-primary-300 hover:shadow-sm transition-all bg-white"
+                        on:click={() => openStudentSubmission(sub)}
+                      >
+                        <div class="flex items-center justify-between">
+                          <div class="flex items-center space-x-3">
+                            <div class="h-9 w-9 bg-green-100 rounded-full flex items-center justify-center">
+                              <span class="text-xs font-semibold text-green-700">
+                                {sub.user?.firstName?.charAt(0) || '?'}{sub.user?.lastName?.charAt(0) || ''}
+                              </span>
+                            </div>
+                            <div>
+                              <p class="text-sm font-medium text-gray-900">{sub.user?.firstName} {sub.user?.lastName}</p>
+                              <p class="text-xs text-gray-500">{new Date(sub.submittedAt).toLocaleString('id-ID')}</p>
+                            </div>
+                          </div>
+                          <div class="flex items-center space-x-3">
+                            {#if sub.score != null}
+                              <span class="text-sm font-bold text-primary-600">{sub.score}/100</span>
+                            {:else}
+                              <span class="text-xs text-yellow-600 bg-yellow-50 px-2 py-1 rounded">Belum dinilai</span>
+                            {/if}
+                            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                            </svg>
+                          </div>
+                        </div>
+                      </button>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+
+              <!-- Not submitted students -->
+              {@const submittedIds = new Set(allSubmissions.map(s => s.userId))}
+              {@const notSubmitted = classStudents.filter(cs => !submittedIds.has(cs.id))}
+              {#if notSubmitted.length > 0}
+                <div>
+                  <h3 class="text-sm font-semibold text-red-600 mb-3 flex items-center">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Belum Submit ({notSubmitted.length})
+                  </h3>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {#each notSubmitted as student}
+                      <div class="flex items-center space-x-3 border border-gray-100 rounded-lg p-3 bg-gray-50">
+                        <div class="h-8 w-8 bg-gray-200 rounded-full flex items-center justify-center">
+                          <span class="text-xs font-medium text-gray-500">
+                            {student.firstName?.charAt(0) || '?'}{student.lastName?.charAt(0) || ''}
+                          </span>
+                        </div>
+                        <p class="text-sm text-gray-600">{student.firstName} {student.lastName}</p>
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+            {/if}
+          </div>
+        </div>
+      {/if}
+
     {/if}
   </main>
 
@@ -1327,6 +1520,93 @@
   {/if}
 
   <!-- Delete Confirmation Modal -->
+  <!-- Student Submission Detail Modal (Teacher Grading) -->
+  {#if selectedStudentSubmission}
+    <div 
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      on:click={closeStudentSubmission}
+      on:keydown={(e) => { if (e.key === 'Escape') closeStudentSubmission(); }}
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+    >
+      <!-- svelte-ignore a11y-click-events-have-key-events -->
+      <!-- svelte-ignore a11y-no-static-element-interactions -->
+      <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" on:click|stopPropagation>
+        <!-- Header -->
+        <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
+          <div>
+            <h3 class="text-lg font-semibold text-gray-900">
+              {selectedStudentSubmission.user?.firstName} {selectedStudentSubmission.user?.lastName}
+            </h3>
+            <p class="text-sm text-gray-500">
+              Submitted: {new Date(selectedStudentSubmission.submittedAt).toLocaleString('id-ID')}
+            </p>
+          </div>
+          <button on:click={closeStudentSubmission} class="text-gray-400 hover:text-gray-600">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Answer -->
+        <div class="px-6 py-4">
+          <h4 class="text-sm font-semibold text-gray-700 mb-2">Jawaban:</h4>
+          <div class="bg-gray-50 rounded-lg border border-gray-200 p-4 text-sm text-gray-700 whitespace-pre-wrap leading-relaxed max-h-64 overflow-y-auto">
+            {getCleanAnswer(selectedStudentSubmission.answer || '(tidak ada jawaban)')}
+          </div>
+        </div>
+
+        <!-- Grading Form -->
+        <div class="px-6 py-4 border-t border-gray-200">
+          <h4 class="text-sm font-semibold text-gray-700 mb-3">Penilaian:</h4>
+
+          {#if gradingSuccess}
+            <div class="mb-3 bg-green-50 border border-green-200 rounded-md p-3 text-sm text-green-700">
+              {gradingSuccess}
+            </div>
+          {/if}
+
+          <div class="grid grid-cols-1 gap-4">
+            <div>
+              <label for="grading-score" class="block text-sm font-medium text-gray-700 mb-1">Score (0-100)</label>
+              <input
+                id="grading-score"
+                type="number"
+                min="0"
+                max="100"
+                bind:value={gradingScore}
+                class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-primary-500 focus:border-primary-500"
+                placeholder="Masukkan nilai"
+              />
+            </div>
+            <div>
+              <label for="grading-feedback" class="block text-sm font-medium text-gray-700 mb-1">Feedback</label>
+              <textarea
+                id="grading-feedback"
+                bind:value={gradingFeedback}
+                rows="3"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-primary-500 focus:border-primary-500"
+                placeholder="Tulis feedback untuk siswa (opsional)"
+              ></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3 sticky bottom-0 bg-white">
+          <Button variant="secondary" size="sm" on:click={closeStudentSubmission} disabled={gradingLoading}>
+            Tutup
+          </Button>
+          <Button variant="primary" size="sm" on:click={submitGrade} loading={gradingLoading} disabled={gradingLoading}>
+            {gradingLoading ? 'Menyimpan...' : 'Simpan Nilai'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   {#if showDeleteConfirm}
     <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" on:click={cancelDelete} on:keydown role="dialog" aria-modal="true" aria-labelledby="delete-title" tabindex="-1">
       <div class="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4" role="document">
