@@ -515,6 +515,15 @@
 
       const messageContent = newMessage.trim();
       const containsIdeaAITag = /@AI\b/i.test(messageContent);
+
+      // Detect emoji-only messages — don't send chatType for these
+      const isEmojiOnlyMsg = (() => {
+        const stripped = messageContent.replace(
+          /[\p{Emoji_Presentation}\p{Extended_Pictographic}\p{Emoji_Modifier}\p{Emoji_Modifier_Base}\p{Emoji_Component}\uFE0E\uFE0F\u200D\u200B\u00A0\s]/gu,
+          '',
+        );
+        return stripped.length === 0 && messageContent.length > 0;
+      })();
       
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -527,7 +536,7 @@
           content: messageContent,
           type: 'TEXT',
           annotationId: selectedAnnotationForChat.id,
-          chatType: selectedChatType
+          ...(isEmojiOnlyMsg ? {} : { chatType: selectedChatType })
         })
       });
       

@@ -92,9 +92,10 @@ export const POST: RequestHandler = async ({ request }) => {
     // Detect emoji-only messages — skip chatType and heat-map counting
     const isEmojiOnly = (str: string) => {
       if (!str) return false;
-      // Remove all emoji/unicode symbols, whitespace, and zero-width joiners
+      // Remove all emoji/unicode symbols, variation selectors, zero-width joiners, 
+      // skin tone modifiers, and whitespace
       const stripped = str.replace(
-        /[\p{Emoji_Presentation}\p{Extended_Pictographic}\uFE0F\u200D\s]/gu,
+        /[\p{Emoji_Presentation}\p{Extended_Pictographic}\p{Emoji_Modifier}\p{Emoji_Modifier_Base}\p{Emoji_Component}\uFE0E\uFE0F\u200D\u200B\u00A0\s]/gu,
         '',
       );
       return stripped.length === 0 && str.trim().length > 0;
