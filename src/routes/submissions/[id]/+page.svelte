@@ -957,6 +957,32 @@
                   </div>
                 {/if}
 
+                <!-- Post-Annotation Reflective Survey -->
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+                  <div class="flex items-start space-x-3">
+                    <div class="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                      </svg>
+                    </div>
+                    <div class="flex-1">
+                      <h5 class="text-sm font-semibold text-blue-800 mb-1">POST-ANNOTATION REFLECTIVE SURVEY</h5>
+                      <p class="text-sm text-blue-700 mb-3">Silakan isi survey refleksi berikut untuk melengkapi proses pembelajaran Anda.</p>
+                      <a
+                        href="https://forms.gle/DR2DydE62Mo4g5RJ6"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                        Isi Survey
+                      </a>
+                    </div>
+                  </div>
+                </div>
+
                 <!-- Action Buttons -->
                 {#if canEditSubmission() || canDeleteSubmission()}
                   <div class="flex justify-end space-x-3 mt-4">
