@@ -20,6 +20,9 @@
   let selectedClassId = '';
   let loading = true;
   let loadingDetails = false;
+  let classStudents: any[] = [];
+  let submissionMap: Record<string, any[]> = {}; // exerciseId → submissions with user info
+  let expandedExerciseId = ''; // which exercise's submissions are expanded
 
   // Modal State
   let showModal = false;
@@ -90,7 +93,19 @@
       groups = groupsData.groups || [];
       readingTexts = textsData.readingTexts || [];
       exercises = exercisesData.exercises || [];
-      
+
+      // Load class students for showing who hasn't submitted
+      try {
+        const classData = await apiFetchJson(`/api/classes?id=${classId}`);
+        classStudents = classData.class?.students || classData.students || [];
+      } catch {
+        classStudents = [];
+      }
+
+      // Reset expanded state
+      expandedExerciseId = '';
+      submissionMap = {};
+
       buildCategories();
     } catch (err) {
       console.error('Error loading class details', err);
@@ -231,6 +246,26 @@
       modalError = err.message || 'Failed to save exit ticket';
     } finally {
       modalLoading = false;
+    }
+  }
+
+  async function toggleSubmissions(exerciseId: string) {
+    if (expandedExerciseId === exerciseId) {
+      expandedExerciseId = '';
+      return;
+    }
+    expandedExerciseId = exerciseId;
+
+    // Load submissions if not already loaded
+    if (!submissionMap[exerciseId]) {
+      try {
+        const data = await apiFetchJson(`/api/exercise-submissions?exerciseId=${exerciseId}`);
+        submissionMap[exerciseId] = data.submissions || [];
+        submissionMap = submissionMap; // trigger reactivity
+      } catch (err) {
+        console.error('Error loading submissions:', err);
+        submissionMap[exerciseId] = [];
+      }
     }
   }
 
@@ -418,6 +453,12 @@
 
 <!-- Reusable Exit Ticket Card Snippet -->
 {#snippet exitTicketCard(exercise: any)}
+  {@const subCount = exercise._count?.submissions ?? 0}
+  {@const totalStudents = classStudents.length}
+  {@const subs = submissionMap[exercise.id] || []}
+  {@const submittedUserIds = new Set(subs.map((s: any) => s.userId))}
+  {@const notSubmitted = classStudents.filter((cs: any) => !submittedUserIds.has(cs.student?.id || cs.studentId))}
+
   <div class="border border-gray-200 rounded-lg p-4 hover:-translate-y-0.5 hover:shadow-md transition-all duration-200 bg-white">
     <div class="flex justify-between items-start mb-2">
       <h5 class="text-sm font-semibold text-gray-900 truncate" title={exercise.title}>{exercise.title}</h5>
@@ -426,7 +467,7 @@
       </span>
     </div>
     <p class="text-xs text-gray-500 mb-3 line-clamp-2" title={exercise.description}>{exercise.description || 'No description'}</p>
-    
+
     <div class="flex justify-between items-center text-xs text-gray-400 mb-4">
       <div class="flex space-x-2">
         {#if exercise.dueDate}
@@ -447,7 +488,70 @@
         {/if}
       </div>
     </div>
-    
+
+    <!-- Submission progress -->
+    <button
+      type="button"
+      class="w-full mb-3 text-left"
+      on:click={() => toggleSubmissions(exercise.id)}
+    >
+      <div class="flex items-center justify-between text-xs mb-1">
+        <span class="font-medium text-gray-700">
+          {subCount}/{totalStudents} submitted
+        </span>
+        <span class="text-gray-400">
+          {expandedExerciseId === exercise.id ? '▲' : '▼'}
+        </span>
+      </div>
+      <div class="w-full bg-gray-200 rounded-full h-1.5">
+        <div
+          class="h-1.5 rounded-full transition-all duration-300 {subCount === totalStudents && totalStudents > 0 ? 'bg-green-500' : 'bg-primary-500'}"
+          style="width: {totalStudents > 0 ? Math.round((subCount / totalStudents) * 100) : 0}%"
+        ></div>
+      </div>
+    </button>
+
+    <!-- Expanded: show who submitted / not submitted with answers -->
+    {#if expandedExerciseId === exercise.id}
+      <div class="mb-3 border border-gray-100 rounded-md bg-gray-50 max-h-64 overflow-y-auto text-xs">
+        {#if subs.length > 0}
+          <div class="p-2 space-y-2">
+            <p class="font-semibold text-green-700">Submitted:</p>
+            {#each subs as sub}
+              <div class="border border-gray-200 rounded p-2 bg-white">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="font-medium text-gray-800">{sub.user?.firstName} {sub.user?.lastName}</span>
+                  <div class="flex items-center space-x-2">
+                    {#if sub.score != null}
+                      <span class="text-primary-600 font-semibold">{sub.score}</span>
+                    {/if}
+                    <span class="text-gray-400">{new Date(sub.submittedAt).toLocaleDateString()}</span>
+                  </div>
+                </div>
+                <p class="text-gray-600 whitespace-pre-wrap break-words leading-relaxed">{sub.answer || '(no answer)'}</p>
+                {#if sub.feedback}
+                  <p class="mt-1 text-orange-600 italic">Feedback: {sub.feedback}</p>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        {/if}
+        {#if notSubmitted.length > 0}
+          <div class="p-2 border-t border-gray-200">
+            <p class="font-semibold text-red-600 mb-1">Not submitted:</p>
+            {#each notSubmitted as cs}
+              <div class="py-0.5 text-gray-500">
+                {cs.student?.firstName || '?'} {cs.student?.lastName || ''}
+              </div>
+            {/each}
+          </div>
+        {/if}
+        {#if totalStudents === 0}
+          <p class="p-2 text-gray-400 italic">No students in this class.</p>
+        {/if}
+      </div>
+    {/if}
+
     <div class="pt-3 border-t border-gray-100 flex justify-between">
       <Button variant="secondary" size="sm" class="text-xs px-2 py-1" on:click={() => goto(`/submissions/${exercise.id}`)}>
         View Subs

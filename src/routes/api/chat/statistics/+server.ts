@@ -64,7 +64,7 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
       },
     });
 
-    // Get chat messages grouped by user and chat type
+    // Get chat messages grouped by user and chat type (exclude emoji-only messages which have no chatType)
     const chatStats = await prisma.chatMessage.groupBy({
       by: ['userId', 'chatType'],
       where: {
@@ -74,6 +74,9 @@ export const GET: RequestHandler = async ({ request, url }: { request: any; url:
         },
         annotationId: {
           not: null, // Only include annotation discussions
+        },
+        chatType: {
+          not: null, // Exclude emoji-only messages (they have no chatType)
         },
       },
       _count: {

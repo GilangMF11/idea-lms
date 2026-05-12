@@ -43,47 +43,60 @@ function isTokenExpired(token: string): boolean {
 
 function createAuthStore() {
   const { subscribe, set, update } = writable<AuthState>(initialState);
+  let _initialized = false;
 
   return {
     subscribe,
     
-    // Initialize auth state from localStorage
-    init: () => {
-      if (browser) {
-        const token = localStorage.getItem('auth_token');
-        const userStr = localStorage.getItem('auth_user');
-        
-        if (token && userStr) {
-          try {
-            if (isTokenExpired(token)) {
-              localStorage.removeItem('auth_token');
-              localStorage.removeItem('auth_user');
-              update(state => ({
-                ...state,
-                user: null,
-                token: null,
-                isAuthenticated: false,
-                isLoading: false
-              }));
-              return;
-            }
-            const user = JSON.parse(userStr);
-            update(state => ({
-              ...state,
-              user,
-              token,
-              isAuthenticated: true,
-              isLoading: false,
-            }));
-          } catch (error) {
-            console.error('Error parsing user data:', error);
+    // Initialize auth state from localStorage (idempotent — safe to call multiple times)
+    init: (options?: { force?: boolean }) => {
+      if (!browser) return;
+
+      // If already initialized and not forced, skip re-reading localStorage
+      // This prevents race conditions on back/forward navigation
+      if (_initialized && !options?.force) {
+        // Still ensure isLoading is false
+        update(state => state.isLoading ? { ...state, isLoading: false } : state);
+        return;
+      }
+
+      const token = localStorage.getItem('auth_token');
+      const userStr = localStorage.getItem('auth_user');
+      
+      if (token && userStr) {
+        try {
+          if (isTokenExpired(token)) {
             localStorage.removeItem('auth_token');
             localStorage.removeItem('auth_user');
-            update(state => ({ ...state, isLoading: false }));
+            _initialized = true;
+            update(state => ({
+              ...state,
+              user: null,
+              token: null,
+              isAuthenticated: false,
+              isLoading: false
+            }));
+            return;
           }
-        } else {
+          const user = JSON.parse(userStr);
+          _initialized = true;
+          update(state => ({
+            ...state,
+            user,
+            token,
+            isAuthenticated: true,
+            isLoading: false,
+          }));
+        } catch (error) {
+          console.error('Error parsing user data:', error);
+          localStorage.removeItem('auth_token');
+          localStorage.removeItem('auth_user');
+          _initialized = true;
           update(state => ({ ...state, isLoading: false }));
         }
+      } else {
+        _initialized = true;
+        update(state => ({ ...state, isLoading: false }));
       }
     },
 
@@ -195,6 +208,8 @@ function createAuthStore() {
         localStorage.removeItem('auth_token');
         localStorage.removeItem('auth_user');
       }
+      
+      _initialized = false; // Allow re-initialization after logout
       
       set({
         user: null,

@@ -146,7 +146,7 @@
           const updatedUser = { ...currentUser, ...data.user };
           localStorage.setItem('auth_user', JSON.stringify(updatedUser));
         }
-        authStore.init();
+        authStore.init({ force: true });
       }
 
       success = 'Profile updated successfully';

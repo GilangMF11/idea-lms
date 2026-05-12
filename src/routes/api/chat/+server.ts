@@ -89,6 +89,19 @@ export const POST: RequestHandler = async ({ request }) => {
 
     const { classId, content, annotationId, type = 'TEXT', audioUrl, audioDuration, chatType = 'ASKING_QUESTION' } = await request.json();
 
+    // Detect emoji-only messages — skip chatType and heat-map counting
+    const isEmojiOnly = (str: string) => {
+      if (!str) return false;
+      // Remove all emoji/unicode symbols, whitespace, and zero-width joiners
+      const stripped = str.replace(
+        /[\p{Emoji_Presentation}\p{Extended_Pictographic}\uFE0F\u200D\s]/gu,
+        '',
+      );
+      return stripped.length === 0 && str.trim().length > 0;
+    };
+
+    const emojiOnly = type === 'TEXT' && isEmojiOnly(content || '');
+
     if (!classId) {
       return json({ error: 'Class ID is required' }, { status: 400 });
     }
@@ -139,7 +152,7 @@ export const POST: RequestHandler = async ({ request }) => {
         audioUrl: type === 'AUDIO' ? audioUrl : null,
         audioDuration: type === 'AUDIO' ? audioDuration ?? null : null,
         ...(annotationId && { annotationId }), // Include annotationId if provided
-        chatType: chatType as 'ASKING_QUESTION' | 'ANSWERING_QUESTION' | 'GIVING_NEW_IDEA' | 'DISPUTING_IDEAS',
+        ...(emojiOnly ? {} : { chatType: chatType as 'ASKING_QUESTION' | 'ANSWERING_QUESTION' | 'GIVING_NEW_IDEA' | 'DISPUTING_IDEAS' }),
       },
       include: {
         user: {

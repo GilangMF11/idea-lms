@@ -327,7 +327,7 @@
 
       if (response.ok) {
         const result = await response.json();
-        goto(`/classes/${classId}`);
+        goto(`/classes/${classId}/manage`);
       } else {
         const result = await response.json();
         error = result.error || 'Failed to create reading text';
