@@ -33,6 +33,14 @@
   let editCity = '';
   let isSaving = false;
 
+  // Reset password modal
+  let showResetPasswordModal = false;
+  let resetPasswordUser: any = null;
+  let newPassword = '';
+  let confirmPassword = '';
+  let resetPasswordLoading = false;
+  let resetPasswordError = '';
+
   onMount(async () => {
     authStore.init();
     
@@ -233,6 +241,68 @@
       'ADMIN': 'Admin',
     };
     return labels[role] || role;
+  }
+
+  function openResetPasswordModal(user: any) {
+    resetPasswordUser = user;
+    newPassword = '';
+    confirmPassword = '';
+    resetPasswordError = '';
+    showResetPasswordModal = true;
+  }
+
+  function closeResetPasswordModal() {
+    showResetPasswordModal = false;
+    resetPasswordUser = null;
+    newPassword = '';
+    confirmPassword = '';
+    resetPasswordError = '';
+  }
+
+  async function handleResetPassword() {
+    resetPasswordError = '';
+
+    if (!newPassword || newPassword.length < 6) {
+      resetPasswordError = 'Password minimal 6 karakter';
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      resetPasswordError = 'Password dan konfirmasi tidak cocok';
+      return;
+    }
+
+    try {
+      resetPasswordLoading = true;
+      const token = $authStore.token;
+      if (!token) return;
+
+      const response = await fetch('/api/users/reset-password', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: resetPasswordUser.id,
+          newPassword,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        success = `Password untuk ${resetPasswordUser.firstName} ${resetPasswordUser.lastName} berhasil direset`;
+        closeResetPasswordModal();
+        setTimeout(() => { success = ''; }, 3000);
+      } else {
+        resetPasswordError = data.error || 'Gagal mereset password';
+      }
+    } catch (err) {
+      resetPasswordError = 'Terjadi kesalahan saat mereset password';
+    } finally {
+      resetPasswordLoading = false;
+    }
   }
 
   const totalPages = Math.ceil(totalUsers / pageSize);
@@ -451,6 +521,16 @@
                         {/if}
                       </button>
                       {#if user.id !== $authStore.user?.id}
+                        <button
+                          type="button"
+                          on:click={() => openResetPasswordModal(user)}
+                          class="text-blue-600 hover:text-blue-900"
+                          title="Reset Password"
+                        >
+                          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                          </svg>
+                        </button>
                         <button
                           type="button"
                           on:click={() => handleDelete(user.id)}
@@ -687,6 +767,82 @@
         </Button>
         <Button variant="primary" size="md" on:click={handleSave} loading={isSaving} disabled={isSaving}>
           {isSaving ? 'Saving...' : 'Save'}
+        </Button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Reset Password Modal -->
+{#if showResetPasswordModal && resetPasswordUser}
+  <div 
+    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" 
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="reset-password-title"
+    tabindex="-1"
+    on:click={closeResetPasswordModal}
+    on:keydown={(e) => {
+      if (e instanceof KeyboardEvent && e.key === 'Escape') {
+        closeResetPasswordModal();
+      }
+    }}
+  >
+    <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <div 
+      class="bg-white rounded-lg shadow-xl max-w-md w-full" 
+      role="document"
+      on:click|stopPropagation
+    >
+      <div class="px-6 py-5 border-b border-gray-200 flex justify-between items-center">
+        <h3 id="reset-password-title" class="text-lg font-medium text-gray-900">Reset Password</h3>
+        <button
+          type="button"
+          on:click={closeResetPasswordModal}
+          class="text-gray-400 hover:text-gray-500"
+          aria-label="Close modal"
+        >
+          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      
+      <div class="px-6 py-5 space-y-4">
+        <div class="bg-blue-50 border border-blue-200 rounded-md p-3">
+          <p class="text-sm text-blue-800">
+            Reset password untuk: <strong>{resetPasswordUser.firstName} {resetPasswordUser.lastName}</strong> ({resetPasswordUser.email})
+          </p>
+        </div>
+
+        {#if resetPasswordError}
+          <Alert type="error" message={resetPasswordError} />
+        {/if}
+
+        <FormField
+          label="Password Baru"
+          type="password"
+          bind:value={newPassword}
+          placeholder="Minimal 6 karakter"
+          required
+        />
+
+        <FormField
+          label="Konfirmasi Password"
+          type="password"
+          bind:value={confirmPassword}
+          placeholder="Ulangi password baru"
+          required
+        />
+      </div>
+      
+      <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+        <Button variant="secondary" size="md" on:click={closeResetPasswordModal} disabled={resetPasswordLoading}>
+          Batal
+        </Button>
+        <Button variant="primary" size="md" on:click={handleResetPassword} loading={resetPasswordLoading} disabled={resetPasswordLoading}>
+          {resetPasswordLoading ? 'Mereset...' : 'Reset Password'}
         </Button>
       </div>
     </div>
