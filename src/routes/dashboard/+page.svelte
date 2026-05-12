@@ -55,7 +55,7 @@
                 localStorage.setItem('auth_user', JSON.stringify(data.user));
               }
               // Re-init auth store to load from localStorage
-              authStore.init();
+              authStore.init({ force: true });
               // Check if profile is complete
               if (!data.profileComplete) {
                 goto('/complete-profile', { replaceState: true });

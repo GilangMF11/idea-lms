@@ -9,14 +9,20 @@ import {
   checkReadingTextAIRequestLimit,
   getRemainingReadingTextAIRequests,
   generateReadingAssistantResponse,
+  getReadingTextAILimit,
+  getGlobalAILimit,
 } from '$lib/ai.js';
 
 export const POST: RequestHandler = async ({ request }: { request: any }) => {
+  let question = '';
   try {
     const user = getAuthUser(request);
 
     const body = await request.json();
-    const { question, classId, readingTextId, annotationId } = body ?? {};
+    const classId = body?.classId;
+    const readingTextId = body?.readingTextId;
+    const annotationId = body?.annotationId;
+    question = body?.question || '';
 
     if (!question || !String(question).trim()) {
       return json({ error: 'Question is required' }, { status: 400 });
@@ -76,19 +82,26 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
       }
     }
 
-    // Enforce per-readingText AI limit (3 per readingText per user per day)
+    const perReadingTextLimit = getReadingTextAILimit();
+    const globalLimit = getGlobalAILimit();
+
+    // Enforce per-readingText AI limit
     if (!checkReadingTextAIRequestLimit(user.id, readingTextId)) {
       const remainingForReadingText = getRemainingReadingTextAIRequests(
         user.id,
         readingTextId,
       );
 
+      // Build ChatGPT redirect URL so the user can continue there
+      const chatgptUrl = `https://chatgpt.com/?q=${encodeURIComponent(String(question))}`;
+
       return json(
         {
           error:
-            'You have reached the AI assistance limit for this reading text (3 times).',
+            `You have reached the AI assistance limit for this reading text (${perReadingTextLimit} times).`,
           remainingForReadingText,
-          perReadingTextLimit: 3,
+          perReadingTextLimit,
+          chatgptUrl,
         },
         { status: 429 },
       );
@@ -97,11 +110,13 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
     // Also respect global AI limit if enabled
     if (!checkAIRequestLimit(user.id)) {
       const remaining = getRemainingAIRequests(user.id);
+      const chatgptUrl = `https://chatgpt.com/?q=${encodeURIComponent(String(question))}`;
       return json(
         {
           error: 'AI request limit exceeded',
           remaining,
-          limit: 5,
+          limit: globalLimit,
+          chatgptUrl,
         },
         { status: 429 },
       );
@@ -157,12 +172,21 @@ export const POST: RequestHandler = async ({ request }: { request: any }) => {
       message: aiChatMessage,
       remaining: remainingGlobal,
       readingTextRemaining: remainingForReadingText,
-      perReadingTextLimit: 3,
-      limit: 5,
+      perReadingTextLimit,
+      limit: globalLimit,
     });
-  } catch (error) {
-    console.error('IDEA AI chat error:', error);
-    return json({ error: 'Failed to generate AI response' }, { status: 500 });
+  } catch (error: any) {
+    console.error('IDEA AI chat error:', error?.message || error);
+
+    // If OpenAI fails (quota, key issue, network), redirect user to ChatGPT web
+    const chatgptUrl = `https://chatgpt.com/?q=${encodeURIComponent(String(question || ''))}`;
+    return json(
+      {
+        error: 'AI service unavailable — redirecting to ChatGPT',
+        chatgptUrl,
+      },
+      { status: 503 },
+    );
   }
 };
 

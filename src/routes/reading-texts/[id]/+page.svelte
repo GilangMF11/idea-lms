@@ -405,7 +405,7 @@
         const data = await response.json();
         console.log('Chat messages loaded:', data);
         const serverMessages = data.messages || [];
-        // Pertahankan pesan lokal dari IDEA AI yang tidak disimpan di server
+        // Pertahankan pesan lokal dari AI yang tidak disimpan di server
         const localAIMessages = chatMessages.filter(
           (m) => m && m.userId === 'idea-ai'
         );
@@ -514,7 +514,7 @@
       aiError = '';
 
       const messageContent = newMessage.trim();
-      const containsIdeaAITag = /@IDEA\s*AI\b/i.test(messageContent);
+      const containsIdeaAITag = /@AI\b/i.test(messageContent);
       
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -583,6 +583,11 @@
             : 'Failed to get AI response');
         aiError = msg;
         chatError = msg;
+
+        // Redirect to ChatGPT web on limit (429) or OpenAI failure (503)
+        if (errorData.chatgptUrl) {
+          window.open(errorData.chatgptUrl, '_blank');
+        }
         return;
       }
 
@@ -1036,7 +1041,7 @@
     });
   }
 
-  // Format konten chat: highlight mention @IDEA AI dengan warna biru
+  // Format konten chat: highlight mention @AI dengan warna biru
   function formatChatContent(text: string) {
     if (!text) return '';
 
@@ -1048,15 +1053,15 @@
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
 
-    // Ganti @IDEA AI (case-insensitive) jadi span biru
+    // Ganti @AI (case-insensitive) jadi span biru
     return escaped.replace(
-      /@IDEA\s*AI\b/gi,
-      '<span class="text-blue-600 font-semibold">@IDEA AI</span>'
+      /@AI\b/gi,
+      '<span class="text-blue-600 font-semibold">@AI</span>'
     );
   }
 
-  // Reactive: cek apakah user sedang mengetik tag @IDEA AI
-  $: ideaTagActive = /@IDEA\s*AI\b/i.test(newMessage || '');
+  // Reactive: cek apakah user sedang mengetik tag @AI
+  $: ideaTagActive = /@AI\b/i.test(newMessage || '');
 
   // Reactive statement to highlight when annotations change
   $: if (readingText && annotations.length > 0) {
@@ -1558,7 +1563,7 @@
             <div class="text-xs text-blue-600 mb-1 flex items-center space-x-1">
               <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200">
                 <span class="w-1.5 h-1.5 rounded-full bg-blue-500 mr-1"></span>
-                <span class="font-semibold">@IDEA AI</span>
+                <span class="font-semibold">@AI</span>
               </span>
               <span>will be asked for this message</span>
             </div>
@@ -1598,7 +1603,7 @@
             <input
               type="text"
               bind:value={newMessage}
-              placeholder="Type your message... (emoji supported 🙂)"
+              placeholder="Type your message... (use @AI for AI assistance)"
               class="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500"
               on:keydown={(e) => e.key === 'Enter' && sendMessage()}
               disabled={timerLocked || chatLoading}

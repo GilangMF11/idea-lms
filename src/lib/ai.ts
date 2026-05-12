@@ -1,6 +1,6 @@
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const AI_REQUEST_LIMIT = 5; // Daily AI requests per user (global)
-const READING_TEXT_AI_REQUEST_LIMIT = 3; // Per-readingText AI requests per user
+const AI_REQUEST_LIMIT = Number(process.env.AI_REQUEST_LIMIT) || 5; // Daily AI requests per user (global)
+const READING_TEXT_AI_REQUEST_LIMIT = Number(process.env.READING_TEXT_AI_REQUEST_LIMIT) || 3; // Per-readingText AI requests per user
 
 interface AIRequest {
   userId: string;
@@ -48,7 +48,10 @@ export async function generateAIFeedback(content: string, type: 'review' | 'sugg
     });
 
     if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.statusText}`);
+      const errBody = await response.text().catch(() => '');
+      throw new Error(
+        `OpenAI API error (${response.status}): ${response.statusText}${errBody ? ' — ' + errBody : ''}`,
+      );
     }
 
     const data = await response.json();
@@ -175,6 +178,16 @@ export function getRemainingReadingTextAIRequests(userId: string, readingTextId:
   return Math.max(0, READING_TEXT_AI_REQUEST_LIMIT - existing.count);
 }
 
+/** Return the configured per-reading-text AI request limit */
+export function getReadingTextAILimit(): number {
+  return READING_TEXT_AI_REQUEST_LIMIT;
+}
+
+/** Return the configured global AI request limit */
+export function getGlobalAILimit(): number {
+  return AI_REQUEST_LIMIT;
+}
+
 /**
  * Generate an AI response for reading-text discussions ("IDEA AI" assistant).
  * This is more conversational than the generic writing feedback helper.
@@ -238,7 +251,10 @@ export async function generateReadingAssistantResponse(params: {
     });
 
     if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.statusText}`);
+      const errBody = await response.text().catch(() => '');
+      throw new Error(
+        `OpenAI API error (${response.status}): ${response.statusText}${errBody ? ' — ' + errBody : ''}`,
+      );
     }
 
     const data = await response.json();

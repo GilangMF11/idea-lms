@@ -38,7 +38,7 @@
               localStorage.setItem('auth_user', JSON.stringify(data.user));
             }
             // Re-init auth store to load from localStorage
-            authStore.init();
+            authStore.init({ force: true });
             synced = true;
             
             // Remove query parameter without causing re-render
@@ -171,7 +171,7 @@
           const updatedUser = { ...currentUser, ...data.user };
           localStorage.setItem('auth_user', JSON.stringify(updatedUser));
         }
-        authStore.init();
+        authStore.init({ force: true });
       }
 
       // Redirect to dashboard
