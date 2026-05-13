@@ -259,7 +259,13 @@
         showSubmissionForm = false;
         submissionForm = { answer: '', files: [], existingFiles: [] };
         stopExerciseTimer();
+        // Reload submissions list but preserve current submission from POST response
+        const currentSubmission = data.submission;
         await loadSubmissions();
+        // Ensure submission is not lost if loadSubmissions couldn't find it yet
+        if (!submission && currentSubmission) {
+          submission = currentSubmission;
+        }
       } else {
         const errorData = await response.json();
         error = errorData.error || 'Failed to submit exit ticket';
